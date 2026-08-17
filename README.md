@@ -1,6 +1,6 @@
 ## Generate Video-Class Datasets with UV
 
-This project converts the `DL_bitrate` column into video quality classes and writes new CSV files for **2, 4, and 6 classes**.
+This project converts the `DL_bitrate` column into video quality classes and writes new CSV files for **6 classes**, keeping only the specified feature columns (`RSRP`, `RSRQ`, `SNR`, `CQI`, `RSSI`).
 
 ### Run with UV
 
@@ -10,13 +10,7 @@ From the project root, run:
 uv run -m Scripts.treatment_data
 ```
 
-Alternative entry point:
-
-```powershell
-uv run -m src.main
-```
-
-Both commands generate class-based outputs for:
+Generates class-based outputs for:
 
 - Amazon Static
 - Amazon Driving
@@ -25,10 +19,10 @@ Both commands generate class-based outputs for:
 
 Output folders are created automatically:
 
-- `Amazon-2/`, `Amazon-4/`, `Amazon-6/`
-- `Netflix-2/`, `Netflix-4/`, `Netflix-6/`
+- `Amazon-6/`
+- `Netflix-6/`
 
-Each run prints `class_count` in the terminal for validation.
+Each run prints `class_count` in the terminal for validation. Generated CSVs contain only columns: `RSRP,RSRQ,SNR,CQI,RSSI,resolution_class`.
 
 ## Video Class Definition Format
 
@@ -51,20 +45,3 @@ Class assignment is based on `DL_bitrate / 1000` (Mbps), using these bitrate ran
 - `5` -> `1080p`
 - `20` -> `4K`
 
-### 4-Class Mapping
-
-- `0.1` -> `Low`
-- `0.7` -> `Low`
-- `1.1` -> `HD`
-- `2.5` -> `HD`
-- `5` -> `1080p`
-- `20` -> `4K`
-
-### 2-Class Mapping
-
-- `0.1` -> `Low`
-- `0.7` -> `Low`
-- `1.1` -> `Low`
-- `2.5` -> `High`
-- `5` -> `High`
-- `20` -> `High`
