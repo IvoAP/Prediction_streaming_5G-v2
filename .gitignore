@@ -216,3 +216,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Generated class datasets
+Amazon-2/
+Amazon-4/
+Amazon-6/
+Netflix-2/
+Netflix-4/
+Netflix-6/
