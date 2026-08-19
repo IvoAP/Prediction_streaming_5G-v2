@@ -224,3 +224,8 @@ Amazon-6/
 Netflix-2/
 Netflix-4/
 Netflix-6/
+
+# Generated smote datasets
+
+Amazon-6-SMOTE/
+Netflix-6-SMOTE/
