@@ -224,3 +224,7 @@ Amazon-6/
 Netflix-2/
 Netflix-4/
 Netflix-6/
+
+# Custom test results folder
+Tests/
+
