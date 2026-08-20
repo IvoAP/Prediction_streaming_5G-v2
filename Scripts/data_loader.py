@@ -9,10 +9,10 @@ TARGET_COLUMN = "resolution_class"
 RESOLUTION_CLASSES = ["144p", "360p", "480p", "720p", "1080p", "4K"]
 
 DATASETS_STANDARD = {
-    "Amazon Static": Path("Amazon-6/Static/amazon_6_static.csv"),
-    "Amazon Driving": Path("Amazon-6/Driving/amazon_6_driving.csv"),
-    "Netflix Static": Path("Netflix-6/Static/netflix_6_static.csv"),
-    "Netflix Driving": Path("Netflix-6/Driving/netflix_6_driving.csv"),
+    "Amazon Static": Path("Amazon/Static/amazon_static.csv"),
+    "Amazon Driving": Path("Amazon/Driving/amazon_driving.csv"),
+    "Netflix Static": Path("Netflix/Static/netflix_static.csv"),
+    "Netflix Driving": Path("Netflix/Driving/netflix_driving.csv"),
 }
 
 DATASETS_SMOTE = {

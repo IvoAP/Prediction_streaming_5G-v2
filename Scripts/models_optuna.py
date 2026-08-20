@@ -9,11 +9,9 @@ from sklearn.model_selection import cross_val_score
 
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
-from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import AdaBoostClassifier
-from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 
 warnings.filterwarnings("ignore")
@@ -57,31 +55,6 @@ def optimize_gnb(X_train, y_train, n_trials=5):
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
     return study.best_params
 
-
-def optimize_mlp(X_train, y_train, n_trials=5):
-    def objective(trial):
-        hidden_layer_size = trial.suggest_int("hidden_layer_size", 10, 150)
-        alpha = trial.suggest_float("alpha", 1e-6, 1e-1, log=True)
-        learning_rate_init = trial.suggest_float("learning_rate_init", 1e-4, 1e-1, log=True)
-
-        model = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", MLPClassifier(
-                hidden_layer_sizes=(hidden_layer_size,),
-                alpha=alpha,
-                learning_rate_init=learning_rate_init,
-                max_iter=500,
-                random_state=42
-            ))
-        ])
-
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
-        return scores.mean()
-
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    return study.best_params
 
 
 def optimize_rf(X_train, y_train, n_trials=5):
@@ -164,25 +137,6 @@ def optimize_adaboost(X_train, y_train, n_trials=5):
     return study.best_params
 
 
-def optimize_svm(X_train, y_train, n_trials=5):
-    def objective(trial):
-        C = trial.suggest_float("C", 1e-2, 1e2, log=True)
-        kernel = trial.suggest_categorical("kernel", ["rbf", "linear", "poly"])
-        gamma = trial.suggest_categorical("gamma", ["scale", "auto"])
-
-        model = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", SVC(C=C, kernel=kernel, gamma=gamma, probability=True, max_iter=5000, cache_size=1000, random_state=42))
-        ])
-
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
-        return scores.mean()
-
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    return study.best_params
-
 
 def optimize_lightgbm(X_train, y_train, n_trials=5):
     def objective(trial):
@@ -217,11 +171,9 @@ def optimize_lightgbm(X_train, y_train, n_trials=5):
 MODEL_OPTIMIZERS = {
     "KNN": optimize_knn,
     "GaussianNB": optimize_gnb,
-    "MLP": optimize_mlp,
     "RandomForest": optimize_rf,
     "GradientBoosting": optimize_gradient_boosting,
     "AdaBoost": optimize_adaboost,
-    "SVM": optimize_svm,
     "LightGBM": optimize_lightgbm,
 }
 
@@ -246,19 +198,6 @@ def build_final_model(model_name: str, best_params: dict):
             ("classifier", GaussianNB(**params))
         ])
 
-    elif model_name == "MLP":
-        hidden_layer_size = params.pop("hidden_layer_size")
-        return Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", MLPClassifier(
-                hidden_layer_sizes=(hidden_layer_size,),
-                **params,
-                max_iter=1000,
-                random_state=42
-            ))
-        ])
-
     elif model_name == "RandomForest":
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -275,13 +214,6 @@ def build_final_model(model_name: str, best_params: dict):
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("classifier", AdaBoostClassifier(**params, random_state=42))
-        ])
-
-    elif model_name == "SVM":
-        return Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("scaler", StandardScaler()),
-            ("classifier", SVC(**params, probability=True, max_iter=5000, cache_size=1000, random_state=42))
         ])
 
     elif model_name == "LightGBM":

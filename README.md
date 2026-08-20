@@ -39,9 +39,9 @@ The training pipeline in `Scripts/training_pipeline.py` performs automated hyper
 ### Supported Machine Learning Models:
 1. **KNN** (`KNeighborsClassifier`)
 2. **Gaussian Naive Bayes** (`GaussianNB`)
-3. **MLP - Neural Network** (`MLPClassifier`)
-4. **Random Forest** (`RandomForestClassifier`)
-5. **SVM** (`SVC`)
+3. **Random Forest** (`RandomForestClassifier`)
+4. **Gradient Boosting** (`GradientBoostingClassifier`)
+5. **AdaBoost** (`AdaBoostClassifier`)
 6. **LightGBM** (`LGBMClassifier`)
 
 ---

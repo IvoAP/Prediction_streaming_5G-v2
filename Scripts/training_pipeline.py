@@ -15,11 +15,9 @@ from Scripts.evaluation import evaluate_model, save_results
 DEFAULT_MODELS = [
     "KNN",
     "GaussianNB",
-    "MLP",
     "RandomForest",
     "GradientBoosting",
     "AdaBoost",
-    "SVM",
     "LightGBM",
 ]
 
