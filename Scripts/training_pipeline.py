@@ -8,7 +8,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-from Scripts.data_loader import DATASETS, load_and_preprocess_dataset
+from Scripts.data_loader import DATASETS_STANDARD, DATASETS_SMOTE, load_and_preprocess_dataset
 from Scripts.models_optuna import MODEL_OPTIMIZERS, build_final_model
 from Scripts.evaluation import evaluate_model, save_results
 
@@ -29,8 +29,9 @@ def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=20, use_sm
     Orchestrates dataset loading, Optuna hyperparameter tuning, model training,
     and performance evaluation across selected datasets and models.
     """
+    dataset_map = DATASETS_SMOTE if use_smote else DATASETS_STANDARD
     if datasets_to_run is None:
-        datasets_to_run = list(DATASETS.keys())
+        datasets_to_run = list(dataset_map.keys())
     if models_to_run is None:
         models_to_run = DEFAULT_MODELS
 
@@ -38,18 +39,20 @@ def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=20, use_sm
     per_class_results = []
     best_params_list = []
 
-    print("\n" + "=" * 60)
-    print(" INICIANDO EXPERIMENTOS DE TREINAMENTO E OTIMIZACAO (OPTUNA)")
-    print("=" * 60)
+    mode_str = "COM SMOTE" if use_smote else "SEM SMOTE"
+
+    print("\n" + "=" * 65)
+    print(f" INICIANDO EXPERIMENTOS DE TREINAMENTO E OTIMIZACAO - {mode_str}")
+    print("=" * 65)
     print(f"Cenarios selecionados : {datasets_to_run}")
     print(f"Modelos selecionados  : {models_to_run}")
     print(f"Trials do Optuna      : {n_trials}")
-    print(f"Uso de SMOTE          : {use_smote}")
-    print("=" * 60)
+    print(f"Modo Dataset          : {mode_str}")
+    print("=" * 65)
 
     for dataset_name in datasets_to_run:
         print(f"\n============================================================")
-        print(f" CARREGANDO DATASET: {dataset_name}")
+        print(f" CARREGANDO DATASET ({mode_str}): {dataset_name}")
         print(f"============================================================")
 
         try:
@@ -108,15 +111,16 @@ def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=20, use_sm
             print(f"   F1-Score (Weighted) : {global_res['f1_score_weighted']:.4f}")
             print(f"   Tempo Treino (s)    : {global_res['train_time_seconds']:.2f}s")
 
-    # Save to CSV
+    # Save to CSV in designated subfolder (Results/Without_SMOTE or Results/With_SMOTE)
     save_results(
         global_results=global_results,
         per_class_results=per_class_results,
-        best_params_list=best_params_list
+        best_params_list=best_params_list,
+        use_smote=use_smote
     )
 
     print("\n============================================================")
-    print(" TODOS OS EXPERIMENTOS FORAM CONCLUIDOS COM SUCESSO!")
+    print(f" TODOS OS EXPERIMENTOS ({mode_str}) FORAM CONCLUIDOS COM SUCESSO!")
     print("============================================================\n")
 
 
@@ -128,16 +132,21 @@ def display_menu():
     use_smote = False
 
     while True:
-        print("\n" + "=" * 55)
+        mode_label = "COM SMOTE" if use_smote else "SEM SMOTE"
+        print("\n" + "=" * 60)
         print("     PIPELINE DE TREINAMENTO 5G - 6 CLASSES MENU ")
-        print("=" * 55)
+        print("=" * 60)
+        print(f" Modo Atual de Dataset : [{mode_label}]")
+        print(f" Trials do Optuna      : [{n_trials}]")
+        print("-" * 60)
         print(" [1] Executar PIPELINE COMPLETO (4 Cenários x 8 Modelos)")
         print(" [2] Selecionar um Cenário Específico")
         print(" [3] Selecionar um Modelo Específico")
-        print(" [4] Configurar Quantidade de Trials do Optuna (Atual: {})".format(n_trials))
-        print(" [5] Rodar Teste Rápido de Validação (2 Trials / 1 Cenário)")
+        print(" [4] Alternar Modo de Dataset (SEM SMOTE / COM SMOTE)")
+        print(" [5] Configurar Quantidade de Trials do Optuna (Atual: {})".format(n_trials))
+        print(" [6] Rodar Teste Rápido de Validação (2 Trials / 1 Cenário)")
         print(" [0] Sair")
-        print("=" * 55)
+        print("=" * 60)
 
         choice = input("Escolha uma opção: ").strip()
 
@@ -145,7 +154,7 @@ def display_menu():
             run_experiment(n_trials=n_trials, use_smote=use_smote)
         elif choice == "2":
             print("\nCenários disponíveis:")
-            datasets_list = list(DATASETS.keys())
+            datasets_list = list(DATASETS_STANDARD.keys())
             for idx, ds in enumerate(datasets_list, 1):
                 print(f"  [{idx}] {ds}")
             ds_choice = input("Selecione o número do cenário: ").strip()
@@ -165,19 +174,23 @@ def display_menu():
             else:
                 print("[ERRO] Opção de modelo inválida.")
         elif choice == "4":
+            use_smote = not use_smote
+            new_mode = "COM SMOTE" if use_smote else "SEM SMOTE"
+            print(f"✅ Modo de dataset alterado para: {new_mode}")
+        elif choice == "5":
             val = input("Digite o novo número de trials do Optuna: ").strip()
             if val.isdigit() and int(val) > 0:
                 n_trials = int(val)
-                print(f"[OK] Número de trials alterado para: {n_trials}")
+                print(f"✅ Número de trials alterado para: {n_trials}")
             else:
                 print("[ERRO] Valor inválido.")
-        elif choice == "5":
+        elif choice == "6":
             print("\n[TEST] Executando teste rápido de validação...")
             run_experiment(
                 datasets_to_run=["Amazon Static"],
                 models_to_run=["KNN"],
                 n_trials=2,
-                use_smote=False
+                use_smote=use_smote
             )
         elif choice == "0":
             print("Encerrando pipeline. Até logo!")
@@ -191,6 +204,7 @@ def main():
     parser.add_argument("--test-run", action="store_true", help="Executa um teste rapido para verificar funcionamento do codigo.")
     parser.add_argument("--all", action="store_true", help="Executa o pipeline completo sem exibir o menu interativo.")
     parser.add_argument("--n-trials", type=int, default=20, help="Numero de trials para otimizacao com Optuna (padrao: 20).")
+    parser.add_argument("--smote", action="store_true", help="Utiliza os datasets gerados com SMOTE.")
 
     args = parser.parse_args()
 
@@ -200,11 +214,11 @@ def main():
             datasets_to_run=["Amazon Static"],
             models_to_run=["KNN"],
             n_trials=2,
-            use_smote=False
+            use_smote=args.smote
         )
     elif args.all:
         print("[RUN] Flag --all detectada. Executando pipeline completo...")
-        run_experiment(n_trials=args.n_trials, use_smote=False)
+        run_experiment(n_trials=args.n_trials, use_smote=args.smote)
     else:
         display_menu()
 

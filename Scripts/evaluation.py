@@ -1,5 +1,6 @@
 import time
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 
@@ -25,7 +26,7 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, model_name: str, dat
     start_train = time.perf_counter()
     model.fit(X_train, y_train)
     train_time = time.perf_counter() - start_train
-    
+
     # Inference
     start_inference = time.perf_counter()
     y_pred = model.predict(X_test)
@@ -92,10 +93,17 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, model_name: str, dat
     return global_result, per_class_rows
 
 
-def save_results(global_results: list, per_class_results: list, best_params_list: list,
-                 global_csv="model_results_global.csv",
-                 per_class_csv="model_results_per_class.csv",
-                 best_params_csv="optuna_best_params.csv"):
+def save_results(global_results: list, per_class_results: list, best_params_list: list, use_smote: bool = False):
+    """
+    Saves or appends results to CSV files inside designated subfolders (Results/Without_SMOTE or Results/With_SMOTE).
+    """
+    output_dir = Path("Results/With_SMOTE") if use_smote else Path("Results/Without_SMOTE")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    global_csv = output_dir / "model_results_global.csv"
+    per_class_csv = output_dir / "model_results_per_class.csv"
+    best_params_csv = output_dir / "optuna_best_params.csv"
+
     if global_results:
         df_global = pd.DataFrame(global_results)
         df_global.sort_values(by=["dataset", "balanced_accuracy"], ascending=[True, False], inplace=True)
