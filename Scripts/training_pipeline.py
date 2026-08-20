@@ -12,10 +12,19 @@ from Scripts.data_loader import DATASETS, load_and_preprocess_dataset
 from Scripts.models_optuna import MODEL_OPTIMIZERS, build_final_model
 from Scripts.evaluation import evaluate_model, save_results
 
-DEFAULT_MODELS = ["KNN", "GaussianNB", "MLP", "RandomForest", "SVM"]
+DEFAULT_MODELS = [
+    "KNN",
+    "GaussianNB",
+    "MLP",
+    "RandomForest",
+    "GradientBoosting",
+    "AdaBoost",
+    "SVM",
+    "LightGBM",
+]
 
 
-def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=5, use_smote=False):
+def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=20, use_smote=False):
     """
     Orchestrates dataset loading, Optuna hyperparameter tuning, model training,
     and performance evaluation across selected datasets and models.
@@ -93,7 +102,9 @@ def run_experiment(datasets_to_run=None, models_to_run=None, n_trials=5, use_smo
             global_results.append(global_res)
             per_class_results.extend(per_class_res)
 
+            print(f"   Acurácia             : {global_res['accuracy']:.4f}")
             print(f"   Acurácia Balanceada : {global_res['balanced_accuracy']:.4f}")
+            print(f"   F1-Score (Macro)    : {global_res['f1_score_macro']:.4f}")
             print(f"   F1-Score (Weighted) : {global_res['f1_score_weighted']:.4f}")
             print(f"   Tempo Treino (s)    : {global_res['train_time_seconds']:.2f}s")
 
@@ -113,14 +124,14 @@ def display_menu():
     """
     Displays the CLI interactive terminal menu.
     """
-    n_trials = 5
+    n_trials = 20
     use_smote = False
 
     while True:
         print("\n" + "=" * 55)
         print("     PIPELINE DE TREINAMENTO 5G - 6 CLASSES MENU ")
         print("=" * 55)
-        print(" [1] Executar PIPELINE COMPLETO (4 Cenários x 5 Modelos)")
+        print(" [1] Executar PIPELINE COMPLETO (4 Cenários x 8 Modelos)")
         print(" [2] Selecionar um Cenário Específico")
         print(" [3] Selecionar um Modelo Específico")
         print(" [4] Configurar Quantidade de Trials do Optuna (Atual: {})".format(n_trials))
@@ -179,7 +190,7 @@ def main():
     parser = argparse.ArgumentParser(description="Pipeline de Treinamento e Otimizacao para Predicao de Qualidade 5G")
     parser.add_argument("--test-run", action="store_true", help="Executa um teste rapido para verificar funcionamento do codigo.")
     parser.add_argument("--all", action="store_true", help="Executa o pipeline completo sem exibir o menu interativo.")
-    parser.add_argument("--n-trials", type=int, default=5, help="Numero de trials para otimizacao com Optuna (padrao: 5).")
+    parser.add_argument("--n-trials", type=int, default=20, help="Numero de trials para otimizacao com Optuna (padrao: 20).")
 
     args = parser.parse_args()
 

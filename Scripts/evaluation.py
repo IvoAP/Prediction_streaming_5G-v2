@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 
 from sklearn.metrics import (
+    accuracy_score,
     balanced_accuracy_score,
     f1_score,
     precision_score,
@@ -33,7 +34,9 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, model_name: str, dat
     inference_time_per_sample = inference_time / len(X_test) if len(X_test) > 0 else 0.0
 
     # Global Metrics
+    accuracy = accuracy_score(y_test, y_pred)
     balanced_acc = balanced_accuracy_score(y_test, y_pred)
+    f1_macro = f1_score(y_test, y_pred, average="macro", zero_division=0)
     f1_weighted = f1_score(y_test, y_pred, average="weighted", zero_division=0)
     precision_weighted = precision_score(y_test, y_pred, average="weighted", zero_division=0)
     recall_weighted = recall_score(y_test, y_pred, average="weighted", zero_division=0)
@@ -48,7 +51,9 @@ def evaluate_model(model, X_train, X_test, y_train, y_test, model_name: str, dat
         "dataset": dataset_name,
         "model": model_name,
         "use_smote": use_smote,
+        "accuracy": accuracy,
         "balanced_accuracy": balanced_acc,
+        "f1_score_macro": f1_macro,
         "f1_score_weighted": f1_weighted,
         "precision_weighted": precision_weighted,
         "recall_weighted": recall_weighted,

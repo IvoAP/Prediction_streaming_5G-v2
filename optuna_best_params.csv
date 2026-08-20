@@ -1,0 +1,4 @@
+dataset,model,use_smote,best_params
+Amazon Static,GradientBoosting,False,"{'n_estimators': 152, 'learning_rate': 0.095770265526149, 'max_depth': 2, 'min_samples_split': 12, 'min_samples_leaf': 11, 'subsample': 0.6981039420316641}"
+Amazon Static,AdaBoost,False,"{'n_estimators': 109, 'learning_rate': 0.013799233744916083}"
+Amazon Static,LightGBM,False,"{'n_estimators': 109, 'max_depth': 2, 'learning_rate': 0.015725122281493416, 'num_leaves': 36, 'min_child_samples': 14}"

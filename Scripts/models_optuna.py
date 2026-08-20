@@ -11,6 +11,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neural_network import MLPClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import AdaBoostClassifier
 from sklearn.svm import SVC
 from lightgbm import LGBMClassifier
 
@@ -30,7 +32,7 @@ def optimize_knn(X_train, y_train, n_trials=5):
             ("classifier", KNeighborsClassifier(n_neighbors=n_neighbors, weights=weights, metric=metric))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -48,7 +50,7 @@ def optimize_gnb(X_train, y_train, n_trials=5):
             ("classifier", GaussianNB(var_smoothing=var_smoothing))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -74,7 +76,7 @@ def optimize_mlp(X_train, y_train, n_trials=5):
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -103,7 +105,58 @@ def optimize_rf(X_train, y_train, n_trials=5):
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study.best_params
+
+
+def optimize_gradient_boosting(X_train, y_train, n_trials=5):
+    def objective(trial):
+        n_estimators = trial.suggest_int("n_estimators", 50, 400)
+        learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
+        max_depth = trial.suggest_int("max_depth", 2, 8)
+        min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
+        min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
+        subsample = trial.suggest_float("subsample", 0.6, 1.0)
+
+        model = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", GradientBoostingClassifier(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                max_depth=max_depth,
+                min_samples_split=min_samples_split,
+                min_samples_leaf=min_samples_leaf,
+                subsample=subsample,
+                random_state=42
+            ))
+        ])
+
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study.best_params
+
+
+def optimize_adaboost(X_train, y_train, n_trials=5):
+    def objective(trial):
+        n_estimators = trial.suggest_int("n_estimators", 50, 400)
+        learning_rate = trial.suggest_float("learning_rate", 0.01, 1.0, log=True)
+        model = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", AdaBoostClassifier(
+                n_estimators=n_estimators,
+                learning_rate=learning_rate,
+                random_state=42
+            ))
+        ])
+
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -123,7 +176,7 @@ def optimize_svm(X_train, y_train, n_trials=5):
             ("classifier", SVC(C=C, kernel=kernel, gamma=gamma, probability=True, max_iter=5000, cache_size=1000, random_state=42))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -153,7 +206,7 @@ def optimize_lightgbm(X_train, y_train, n_trials=5):
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=3, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -166,6 +219,8 @@ MODEL_OPTIMIZERS = {
     "GaussianNB": optimize_gnb,
     "MLP": optimize_mlp,
     "RandomForest": optimize_rf,
+    "GradientBoosting": optimize_gradient_boosting,
+    "AdaBoost": optimize_adaboost,
     "SVM": optimize_svm,
     "LightGBM": optimize_lightgbm,
 }
@@ -208,6 +263,18 @@ def build_final_model(model_name: str, best_params: dict):
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("classifier", RandomForestClassifier(**params, random_state=42, n_jobs=-1))
+        ])
+
+    elif model_name == "GradientBoosting":
+        return Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", GradientBoostingClassifier(**params, random_state=42))
+        ])
+
+    elif model_name == "AdaBoost":
+        return Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", AdaBoostClassifier(**params, random_state=42))
         ])
 
     elif model_name == "SVM":
