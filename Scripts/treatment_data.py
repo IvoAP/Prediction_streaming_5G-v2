@@ -2,20 +2,23 @@ import csv
 from collections import Counter
 from pathlib import Path
 
-
 BITRATE_COLUMN = "DL_bitrate"
 RESOLUTION_CLASS_COLUMN = "resolution_class"
 FEATURE_COLUMNS = ["RSRP", "RSRQ", "SNR", "CQI", "RSSI"]
 
+DATASETS_DIR = Path("datasets")
+
 DATASETS = [
-    ("Amazon", "Static", Path("Amazon/Static/amazon_static.csv")),
-    ("Amazon", "Driving", Path("Amazon/Driving/amazon_driving.csv")),
-    ("Netflix", "Static", Path("Netflix/Static/netflix_static.csv")),
-    ("Netflix", "Driving", Path("Netflix/Driving/netflix_driving.csv")),
+    ("Amazon", "Static", DATASETS_DIR / "Amazon" / "Static" / "amazon_static.csv"),
+    ("Amazon", "Driving", DATASETS_DIR / "Amazon" / "Driving" / "amazon_driving.csv"),
+    ("Netflix", "Static", DATASETS_DIR / "Netflix" / "Static" / "netflix_static.csv"),
+    ("Netflix", "Driving", DATASETS_DIR / "Netflix" / "Driving" / "netflix_driving.csv"),
 ]
 
 MISSING_TOKENS = {"", "nan", "none", "null", "na"}
 
+# 6 classes mapping
+# <0.7 -> 144p, 0.7-1.1 -> 360p, 1.1-2.5 -> 480p, 2.5-5.0 -> 720p, 5.0-20.0 -> 1080p, >=20.0 -> 4K
 DICTIONARY_RESOLUTION_6_CLASSES = {
     20: "4K",
     5: "1080p",
@@ -23,6 +26,26 @@ DICTIONARY_RESOLUTION_6_CLASSES = {
     1.1: "480p",
     0.7: "360p",
     0.1: "144p",
+}
+
+# 4 classes mapping
+# <1.1 -> Low_SD (144p + 360p)
+# 1.1-5.0 -> SD_HD (480p + 720p)
+# 5.0-20.0 -> FHD (1080p)
+# >=20.0 -> 4K (4K)
+DICTIONARY_RESOLUTION_4_CLASSES = {
+    20: "4K",
+    5: "FHD",
+    1.1: "SD_HD",
+    0.1: "Low_SD",
+}
+
+# 2 classes mapping
+# <2.5 -> SD (<720p)
+# >=2.5 -> HD_Plus (>=720p)
+DICTIONARY_RESOLUTION_2_CLASSES = {
+    2.5: "HD_Plus",
+    0.1: "SD",
 }
 
 
@@ -44,38 +67,50 @@ def _parse_numeric(value):
         return None
 
 
-def _bitrate_bucket_key(value):
+def get_resolution_class(value, num_classes=6):
     parsed = _parse_numeric(value)
     if parsed is None:
-        return None
+        return 0
 
     value_mbps = parsed / 1000
     if value_mbps <= 0:
-        return None
-    if value_mbps < 0.7:
-        return 0.1
-    if value_mbps < 1.1:
-        return 0.7
-    if value_mbps < 2.5:
-        return 1.1
-    if value_mbps < 5:
-        return 2.5
-    if value_mbps < 20:
-        return 5
-    return 20
-
-
-def classifier_resolution_range(value):
-    bucket_key = _bitrate_bucket_key(value)
-    if bucket_key is None:
         return 0
 
-    return DICTIONARY_RESOLUTION_6_CLASSES[bucket_key]
+    if num_classes == 6:
+        if value_mbps < 0.7:
+            return "144p"
+        if value_mbps < 1.1:
+            return "360p"
+        if value_mbps < 2.5:
+            return "480p"
+        if value_mbps < 5.0:
+            return "720p"
+        if value_mbps < 20.0:
+            return "1080p"
+        return "4K"
+
+    elif num_classes == 4:
+        if value_mbps < 1.1:
+            return "Low_SD"
+        if value_mbps < 5.0:
+            return "SD_HD"
+        if value_mbps < 20.0:
+            return "FHD"
+        return "4K"
+
+    elif num_classes == 2:
+        if value_mbps < 2.5:
+            return "SD"
+        return "HD_Plus"
+
+    else:
+        raise ValueError(f"Unsupported num_classes: {num_classes}. Choose from [2, 4, 6].")
 
 
 def process_csv_with_resolution_classes(
     input_csv_path,
     output_csv_path,
+    num_classes=6,
     bitrate_column=BITRATE_COLUMN,
     class_column=RESOLUTION_CLASS_COLUMN,
     feature_columns=FEATURE_COLUMNS,
@@ -100,7 +135,7 @@ def process_csv_with_resolution_classes(
             writer.writeheader()
 
             for row in reader:
-                class_value = classifier_resolution_range(row.get(bitrate_column))
+                class_value = get_resolution_class(row.get(bitrate_column), num_classes=num_classes)
                 class_counter[class_value] += 1
 
                 filtered_row = {col: row.get(col, "") for col in feature_columns}
@@ -110,21 +145,23 @@ def process_csv_with_resolution_classes(
     return class_counter
 
 
-def generate_resolution_datasets():
-    print("=== Generating datasets for 6 classes ===")
-    for provider, movement_type, input_path in DATASETS:
-        output_dir = Path(f"{provider}-6") / movement_type
-        output_name = f"{provider.lower()}_6_{movement_type.lower()}.csv"
-        output_path = output_dir / output_name
+def generate_all_resolution_datasets(target_classes=(2, 4, 6)):
+    for num_classes in target_classes:
+        print(f"\n=== Generating datasets for {num_classes} classes ===")
+        for provider, movement_type, input_path in DATASETS:
+            output_dir = DATASETS_DIR / f"{provider}-{num_classes}" / movement_type
+            output_name = f"{provider.lower()}_{num_classes}_{movement_type.lower()}.csv"
+            output_path = output_dir / output_name
 
-        class_counter = process_csv_with_resolution_classes(
-            input_csv_path=input_path,
-            output_csv_path=output_path,
-        )
+            class_counter = process_csv_with_resolution_classes(
+                input_csv_path=input_path,
+                output_csv_path=output_path,
+                num_classes=num_classes,
+            )
 
-        print(f"{input_path} -> {output_path}")
-        print(f"  class_count={dict(class_counter)}")
+            print(f"{input_path} -> {output_path}")
+            print(f"  class_count={dict(class_counter)}")
 
 
 if __name__ == "__main__":
-    generate_resolution_datasets()
+    generate_all_resolution_datasets()

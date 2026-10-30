@@ -1,282 +1,67 @@
-import csv
-import math
-import random
-from collections import Counter, defaultdict
 from pathlib import Path
+import pandas as pd
+from imblearn.over_sampling import SMOTE
+from collections import Counter
 
-
-BITRATE_COLUMN = "DL_bitrate"
-RESOLUTION_CLASS_COLUMN = "resolution_class"
 FEATURE_COLUMNS = ["RSRP", "RSRQ", "SNR", "CQI", "RSSI"]
-K_NEIGHBORS = 5
+TARGET_COLUMN = "resolution_class"
 RANDOM_SEED = 42
 
-DATASETS = [
-    ("Amazon", "Static", Path("Amazon-6/Static/amazon_6_static.csv")),
-    ("Amazon", "Driving", Path("Amazon-6/Driving/amazon_6_driving.csv")),
-    ("Netflix", "Static", Path("Netflix-6/Static/netflix_6_static.csv")),
-    ("Netflix", "Driving", Path("Netflix-6/Driving/netflix_6_driving.csv")),
-]
+DATASETS_DIR = Path("datasets")
+
+
+def generate_smote_for_all(target_classes=(2, 4, 6)):
+    for num_classes in target_classes:
+        print(f"\n=== Generating SMOTE datasets for {num_classes} classes ===")
+        datasets = [
+            ("Amazon", "Static", DATASETS_DIR / f"Amazon-{num_classes}" / "Static" / f"amazon_{num_classes}_static.csv"),
+            ("Amazon", "Driving", DATASETS_DIR / f"Amazon-{num_classes}" / "Driving" / f"amazon_{num_classes}_driving.csv"),
+            ("Netflix", "Static", DATASETS_DIR / f"Netflix-{num_classes}" / "Static" / f"netflix_{num_classes}_static.csv"),
+            ("Netflix", "Driving", DATASETS_DIR / f"Netflix-{num_classes}" / "Driving" / f"netflix_{num_classes}_driving.csv"),
+        ]
+
+        for provider, movement_type, input_path in datasets:
+            output_dir = DATASETS_DIR / f"{provider}-{num_classes}-SMOTE" / movement_type
+            output_name = f"{provider.lower()}_{num_classes}_{movement_type.lower()}_smote.csv"
+            output_path = output_dir / output_name
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            if not input_path.exists():
+                print(f"[AVISO] Arquivo {input_path} nao encontrado.")
+                continue
+
+            df = pd.read_csv(input_path)
+            # Filter class 0
+            df[TARGET_COLUMN] = df[TARGET_COLUMN].astype(str).str.strip()
+            df = df[~df[TARGET_COLUMN].isin(["0", "nan", ""])]
+
+            for col in FEATURE_COLUMNS:
+                df[col] = pd.to_numeric(df[col], errors="coerce")
+
+            # Impute median before SMOTE
+            df[FEATURE_COLUMNS] = df[FEATURE_COLUMNS].fillna(df[FEATURE_COLUMNS].median())
+
+            X = df[FEATURE_COLUMNS]
+            y = df[TARGET_COLUMN]
+
+            counts_before = Counter(y)
+            min_class_count = min(counts_before.values())
+            k_neighbors = min(5, min_class_count - 1) if min_class_count > 1 else 1
+
+            if min_class_count > 1:
+                smote = SMOTE(k_neighbors=k_neighbors, random_state=RANDOM_SEED)
+                X_res, y_res = smote.fit_resample(X, y)
+            else:
+                X_res, y_res = X, y
+
+            df_res = pd.concat([pd.DataFrame(X_res, columns=FEATURE_COLUMNS), pd.Series(y_res, name=TARGET_COLUMN)], axis=1)
+            df_res.to_csv(output_path, index=False)
+
+            counts_after = Counter(y_res)
+            print(f"{input_path} -> {output_path}")
+            print(f"  before: {dict(counts_before)}")
+            print(f"  after : {dict(counts_after)}")
 
-MISSING_TOKENS = {"", "nan", "none", "null", "na"}
-
-DICTIONARY_RESOLUTION_6_CLASSES = {
-    20: "4K",
-    5: "1080p",
-    2.5: "720p",
-    1.1: "480p",
-    0.7: "360p",
-    0.1: "144p",
-}
-
-
-def read_csv_dataset(input_csv_path):
-    rows = []
-
-    with input_csv_path.open("r", encoding="utf-8", newline="") as file:
-        reader = csv.DictReader(file)
-
-        if reader.fieldnames is None:
-            raise ValueError(f"CSV without header: {input_csv_path}")
-
-        for row in reader:
-            rows.append(row)
-
-    return rows
-
-
-def parse_feature_value(value):
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def row_to_sample(row):
-    features = []
-
-    for column in FEATURE_COLUMNS:
-        value = parse_feature_value(row.get(column))
-
-        if value is None:
-            return None
-
-        features.append(value)
-
-    return {
-        "features": features,
-        "class": row.get(RESOLUTION_CLASS_COLUMN),
-    }
-
-
-def sample_to_row(sample):
-    row = {}
-
-    for index, column in enumerate(FEATURE_COLUMNS):
-        row[column] = round(sample["features"][index], 2)
-
-    row[RESOLUTION_CLASS_COLUMN] = sample["class"]
-
-    return row
-
-
-def group_samples_by_class(rows):
-    samples_by_class = defaultdict(list)
-
-    for row in rows:
-        sample = row_to_sample(row)
-
-        if sample is None:
-            continue
-
-        samples_by_class[sample["class"]].append(sample)
-
-    return samples_by_class
-
-
-def count_classes(samples_by_class):
-    return Counter(
-        {
-            class_name: len(samples) for class_name, samples in samples_by_class.items()
-        }
-    )
-
-
-def euclidean_distance(sample_a, sample_b):
-    squared_distance = 0.0
-
-    for value_a, value_b in zip(
-        sample_a["features"],
-        sample_b["features"]
-    ):
-        difference = value_a - value_b
-        squared_distance += difference ** 2
-
-    return math.sqrt(squared_distance)
-
-
-def get_neighbors(sample, class_samples, k):
-    distances = []
-
-    for other_sample in class_samples:
-        if other_sample is sample:
-            continue
-
-        distance = euclidean_distance(sample, other_sample)
-
-        distances.append((distance, other_sample))
-
-    distances.sort(key=lambda item: item[0])
-
-    neighbors = [
-        sample_data
-        for _, sample_data in distances[:k]
-    ]
-
-    return neighbors
-
-
-def generate_synthetic_sample(sample, neighbor):
-    synthetic_features = []
-
-    interpolation_factor = random.random()
-
-    for value, neighbor_value in zip(
-        sample["features"],
-        neighbor["features"]
-    ):
-        difference = neighbor_value - value
-
-        synthetic_value = (
-            value + interpolation_factor * difference
-        )
-
-        synthetic_features.append(synthetic_value)
-
-    return {
-        "features": synthetic_features,
-        "class": sample["class"],
-    }
-
-
-def write_csv_dataset(output_csv_path, samples):
-    output_csv_path = Path(output_csv_path)
-    output_csv_path.parent.mkdir(parents=True, exist_ok=True)
-
-    with output_csv_path.open(
-        "w",
-        encoding="utf-8",
-        newline=""
-    ) as file:
-        writer = csv.DictWriter(
-            file,
-            fieldnames=FEATURE_COLUMNS + [RESOLUTION_CLASS_COLUMN],
-        )
-
-        writer.writeheader()
-
-        for sample in samples:
-            writer.writerow(sample_to_row(sample))
-
-
-def process_dataset(input_csv_path, output_csv_path):
-    rows = read_csv_dataset(input_csv_path)
-
-    samples_by_class = group_samples_by_class(rows)
-
-    original_counts = count_classes(samples_by_class)
-
-    balanced_samples = apply_smote(samples_by_class)
-
-    balanced_by_class = defaultdict(list)
-
-    for sample in balanced_samples:
-        balanced_by_class[sample["class"]].append(sample)
-
-    balanced_counts = count_classes(balanced_by_class)
-
-    write_csv_dataset(
-        output_csv_path,
-        balanced_samples,
-    )
-
-    return original_counts, balanced_counts
-
-
-def apply_smote(samples_by_class):
-    class_counts = count_classes(samples_by_class)
-    target_count = max(class_counts.values())
-
-    balanced_samples = []
-
-    for class_name, class_samples in samples_by_class.items():
-        balanced_samples.extend(class_samples)
-
-        samples_to_generate = target_count - len(class_samples)
-
-        if samples_to_generate <= 0:
-            continue
-
-        if len(class_samples) < 2:
-            raise ValueError(
-                f"Cannot apply SMOTE to class '{class_name}' "
-                "with fewer than 2 samples."
-            )
-
-        k = min(K_NEIGHBORS, len(class_samples) - 1)
-
-        for _ in range(samples_to_generate):
-            sample = random.choice(class_samples)
-
-            neighbors = get_neighbors(
-                sample,
-                class_samples,
-                k,
-            )
-
-            neighbor = random.choice(neighbors)
-
-            synthetic_sample = generate_synthetic_sample(
-                sample,
-                neighbor,
-            )
-
-            balanced_samples.append(synthetic_sample)
-
-    return balanced_samples
-
-
-def generate_smote_datasets():
-    print("=== Generating SMOTE datasets ===")
-
-    random.seed(RANDOM_SEED)
-
-    for provider, movement_type, input_path in DATASETS:
-        output_dir = Path(
-            f"{provider}-6-SMOTE"
-        ) / movement_type
-
-        output_name = (
-            f"{provider.lower()}_6_"
-            f"{movement_type.lower()}_smote.csv"
-        )
-
-        output_path = output_dir / output_name
-
-        original_counts, balanced_counts = process_dataset(
-            input_csv_path=input_path,
-            output_csv_path=output_path,
-        )
-
-        print(f"{input_path} -> {output_path}")
-
-        print(
-            f"  before={dict(original_counts)}"
-        )
-
-        print(
-            f"  after={dict(balanced_counts)}"
-        )
 
 if __name__ == "__main__":
-    generate_smote_datasets()
+    generate_smote_for_all()
