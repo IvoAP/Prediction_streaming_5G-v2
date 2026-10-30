@@ -2,6 +2,8 @@ import time
 from pathlib import Path
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 from sklearn.metrics import (
     accuracy_score,
@@ -12,9 +14,52 @@ from sklearn.metrics import (
     matthews_corrcoef,
     log_loss,
     roc_auc_score,
+    confusion_matrix,
 )
 
 from Scripts.data_loader import CLASSES_BY_CONFIG
+
+
+def plot_and_save_confusion_matrix(
+    y_true,
+    y_pred,
+    target_classes: list,
+    model_name: str,
+    dataset_name: str,
+    output_dir: Path,
+):
+    """
+    Computes and plots both normalized (percentages) and raw confusion matrices,
+    saving them as publication-ready PNG and PDF figures.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    clean_ds = dataset_name.replace(" ", "_").lower()
+    clean_m = model_name.replace(" ", "_").lower()
+
+    # Normalized Confusion Matrix (by true rows)
+    cm_norm = confusion_matrix(y_true, y_pred, labels=target_classes, normalize="true")
+
+    plt.figure(figsize=(7, 6))
+    sns.heatmap(
+        cm_norm,
+        annot=True,
+        fmt=".2f",
+        cmap="Blues",
+        xticklabels=target_classes,
+        yticklabels=target_classes,
+        cbar=True,
+        annot_kws={"size": 11, "weight": "bold"},
+    )
+    plt.title(f"Normalized Confusion Matrix\n{model_name} - {dataset_name}", fontsize=12, pad=12)
+    plt.xlabel("Predicted Class", fontsize=11, labelpad=8)
+    plt.ylabel("True Class", fontsize=11, labelpad=8)
+    plt.tight_layout()
+
+    fig_png = output_dir / f"cm_{clean_ds}_{clean_m}.png"
+    fig_pdf = output_dir / f"cm_{clean_ds}_{clean_m}.pdf"
+    plt.savefig(fig_png, dpi=300)
+    plt.savefig(fig_pdf, dpi=300)
+    plt.close()
 
 
 def evaluate_model(
@@ -27,10 +72,12 @@ def evaluate_model(
     dataset_name: str,
     num_classes: int = 6,
     use_smote: bool = False,
+    generate_plots: bool = False,
+    output_dir: Path = None,
 ):
     """
-    Fits the model, evaluates overall performance metrics, measures training/inference speed,
-    and calculates per-class Precision, Recall, and F1-score for all classes of the target configuration.
+    Fits model, calculates performance metrics, latencies, per-class metrics,
+    and optionally renders publication-ready confusion matrices.
     """
     target_classes = CLASSES_BY_CONFIG.get(num_classes)
     if not target_classes:
@@ -74,11 +121,9 @@ def evaluate_model(
 
         try:
             if num_classes == 2:
-                # Binary ROC-AUC
                 pos_idx = list(model.classes_).index(target_classes[1])
                 roc_auc = roc_auc_score((y_test == target_classes[1]).astype(int), y_proba[:, pos_idx])
             else:
-                # Multiclass OvR ROC-AUC
                 roc_auc = roc_auc_score(y_test, y_proba, multi_class="ovr", average="macro")
         except Exception:
             pass
@@ -128,7 +173,53 @@ def evaluate_model(
             "f1_score": f,
         })
 
+    # Plot Confusion Matrix if requested
+    if generate_plots and output_dir is not None:
+        plot_and_save_confusion_matrix(
+            y_true=y_test,
+            y_pred=y_pred,
+            target_classes=target_classes,
+            model_name=model_name,
+            dataset_name=dataset_name,
+            output_dir=output_dir / "confusion_matrices",
+        )
+
     return global_result, per_class_rows
+
+
+def plot_comparison_bar_charts(results_csv: Path, output_dir: Path):
+    """
+    Generates grouped bar charts comparing Macro F1 and Balanced Accuracy across models and scenarios.
+    """
+    if not results_csv.exists():
+        return
+
+    df = pd.read_csv(results_csv)
+    if df.empty or "f1_score_macro" not in df.columns:
+        return
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    sns.set_theme(style="whitegrid")
+
+    # Macro F1 Chart
+    plt.figure(figsize=(10, 5))
+    ax = sns.barplot(
+        data=df,
+        x="dataset",
+        y="f1_score_macro",
+        hue="model",
+        palette="viridis",
+    )
+    plt.title("Macro F1-Score Comparison Across Scenarios", fontsize=13, weight="bold")
+    plt.ylabel("Macro F1-Score", fontsize=11)
+    plt.xlabel("Scenario", fontsize=11)
+    plt.ylim(0, 1.05)
+    plt.legend(bbox_to_anchor=(1.02, 1), loc="upper left", borderaxespad=0)
+    plt.tight_layout()
+
+    plt.savefig(output_dir / "comparison_macro_f1.png", dpi=300)
+    plt.savefig(output_dir / "comparison_macro_f1.pdf", dpi=300)
+    plt.close()
 
 
 def save_results(
@@ -137,10 +228,10 @@ def save_results(
     best_params_list: list,
     num_classes: int = 6,
     use_smote: bool = False,
+    generate_summary_plots: bool = True,
 ):
     """
-    Saves results to CSV files partitioned by class count and SMOTE status.
-    E.g.: Results/classes_6/With_SMOTE/ or Results/classes_4/Without_SMOTE/
+    Saves results to CSV files and optionally renders comparative charts.
     """
     smote_dir = "With_SMOTE" if use_smote else "Without_SMOTE"
     output_dir = Path("Results") / f"classes_{num_classes}" / smote_dir
@@ -155,6 +246,10 @@ def save_results(
         df_global.sort_values(by=["dataset", "balanced_accuracy"], ascending=[True, False], inplace=True)
         df_global.to_csv(global_csv, index=False)
         print(f"-> Global metrics saved to: {global_csv}")
+
+        if generate_summary_plots:
+            plot_comparison_bar_charts(results_csv=global_csv, output_dir=output_dir / "figures")
+            print(f"-> Summary comparison plots saved to: {output_dir / 'figures'}")
 
     if per_class_results:
         df_per_class = pd.DataFrame(per_class_results)
