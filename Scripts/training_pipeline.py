@@ -27,6 +27,7 @@ TREE_MODELS = [
     "RandomForest",
     "ExtraTrees",
     "GradientBoosting",
+    "AdaBoost",
     "LightGBM",
     "XGBoost",
 ]
@@ -58,28 +59,28 @@ def run_experiment(
     per_class_results = []
     best_params_list = []
 
-    mode_str = "COM SMOTE" if use_smote else "SEM SMOTE"
+    mode_str = "WITH SMOTE" if use_smote else "WITHOUT SMOTE"
     output_base_dir = Path("Results") / f"classes_{num_classes}" / ("With_SMOTE" if use_smote else "Without_SMOTE")
 
     print("\n" + "=" * 75)
     print(f" PIPELINE TREE-BASED MODELS - {num_classes} CLASSES ({mode_str})")
     print("=" * 75)
-    print(f"Número de Classes     : {num_classes} {CLASSES_BY_CONFIG.get(num_classes)}")
-    print(f"Cenários selecionados : {datasets_to_run}")
-    print(f"Modelos (Tree-based)  : {models_to_run}")
-    print(f"Trials do Optuna      : {n_trials}")
-    print(f"Sementes aleatórias   : {seeds}")
-    print(f"Modo Dataset          : {mode_str}")
+    print(f"Target Classes Config : {num_classes} {CLASSES_BY_CONFIG.get(num_classes)}")
+    print(f"Selected Scenarios    : {datasets_to_run}")
+    print(f"Tree-Based Models     : {models_to_run}")
+    print(f"Optuna Trials         : {n_trials}")
+    print(f"Random Seeds          : {seeds}")
+    print(f"Dataset Mode          : {mode_str}")
     print("=" * 75)
 
     for dataset_name in datasets_to_run:
         print(f"\n============================================================")
-        print(f" CARREGANDO DATASET ({num_classes} classes | {mode_str}): {dataset_name}")
+        print(f" LOADING DATASET ({num_classes} classes | {mode_str}): {dataset_name}")
         print(f"============================================================")
 
         for model_name in models_to_run:
             if model_name not in MODEL_OPTIMIZERS:
-                print(f"[AVISO] Modelo '{model_name}' não suportado. Pulando...")
+                print(f"[WARNING] Model '{model_name}' not supported. Skipping...")
                 continue
 
             # Run Optuna on base seed (seeds[0])
@@ -91,16 +92,16 @@ def run_experiment(
                     random_state=seeds[0],
                 )
             except Exception as e:
-                print(f"[ERRO] Falha ao carregar dataset '{dataset_name}': {e}")
+                print(f"[ERROR] Failed to load dataset '{dataset_name}': {e}")
                 break
 
             print(f"\n------------------------------------------------------------")
-            print(f"[OPTUNA] Otimizando ({model_name}) para {num_classes} classes ({n_trials} trials)")
+            print(f"[OPTUNA] Optimizing ({model_name}) for {num_classes} classes ({n_trials} trials)")
             print(f"------------------------------------------------------------")
 
             optimizer_fn = MODEL_OPTIMIZERS[model_name]
             best_params = optimizer_fn(X_train_opt, y_train_opt, n_trials=n_trials)
-            print(f"[OK] Melhores parâmetros [{model_name}]: {best_params}")
+            print(f"[OK] Best parameters [{model_name}]: {best_params}")
 
             best_params_list.append({
                 "dataset": dataset_name,
@@ -121,7 +122,6 @@ def run_experiment(
                 )
 
                 final_model = build_final_model(model_name, best_params)
-                # Plot confusion matrix only for first seed to prevent overwriting
                 gen_plot = generate_plots and (seed == seeds[0])
 
                 global_res, per_class_res = evaluate_model(
@@ -155,6 +155,7 @@ def run_experiment(
                 mean_res["f1_score_macro"] = df_seeds["f1_score_macro"].mean()
                 mean_res["f1_score_weighted"] = df_seeds["f1_score_weighted"].mean()
                 mean_res["mcc"] = df_seeds["mcc"].mean()
+                mean_res["cohen_kappa"] = df_seeds["cohen_kappa"].mean()
                 mean_res["train_time_seconds"] = df_seeds["train_time_seconds"].mean()
                 mean_res["inference_time_seconds"] = df_seeds["inference_time_seconds"].mean()
                 mean_res["balanced_accuracy_std"] = df_seeds["balanced_accuracy"].std()
@@ -163,21 +164,22 @@ def run_experiment(
                 global_results.extend(seed_metrics)
                 global_results.append(mean_res)
 
-                print(f"   [MÉDIA ± STD] {model_name}:")
-                print(f"     Bal Acc : {mean_res['balanced_accuracy']:.4f} ± {mean_res['balanced_accuracy_std']:.4f}")
-                print(f"     Macro F1: {mean_res['f1_score_macro']:.4f} ± {mean_res['f1_macro_std']:.4f}")
+                print(f"   [MEAN +- STD] {model_name}:")
+                print(f"     Bal Acc : {mean_res['balanced_accuracy']:.4f} +- {mean_res['balanced_accuracy_std']:.4f}")
+                print(f"     Macro F1: {mean_res['f1_score_macro']:.4f} +- {mean_res['f1_macro_std']:.4f}")
             else:
                 global_results.append(seed_metrics[0])
                 res = seed_metrics[0]
-                print(f"   Acurácia             : {res['accuracy']:.4f}")
-                print(f"   Acurácia Balanceada : {res['balanced_accuracy']:.4f}")
-                print(f"   F1-Score (Macro)    : {res['f1_score_macro']:.4f}")
-                print(f"   F1-Score (Weighted) : {res['f1_score_weighted']:.4f}")
+                print(f"   Accuracy             : {res['accuracy']:.4f}")
+                print(f"   Balanced Accuracy    : {res['balanced_accuracy']:.4f}")
+                print(f"   F1-Score (Macro)     : {res['f1_score_macro']:.4f}")
+                print(f"   F1-Score (Weighted)  : {res['f1_score_weighted']:.4f}")
                 print(f"   MCC                  : {res['mcc']:.4f}")
+                print(f"   Cohen's Kappa        : {res['cohen_kappa']:.4f}")
                 if not pd.isna(res["roc_auc"]):
                     print(f"   ROC-AUC              : {res['roc_auc']:.4f}")
-                print(f"   Tempo Treino (s)    : {res['train_time_seconds']:.2f}s")
-                print(f"   Tempo Inferência (s): {res['inference_time_seconds']:.4f}s")
+                print(f"   Training Time (s)    : {res['train_time_seconds']:.2f}s")
+                print(f"   Inference Time (s)   : {res['inference_time_seconds']:.4f}s")
 
     # Save all results to CSV & charts
     save_results(
@@ -190,7 +192,7 @@ def run_experiment(
     )
 
     print("\n============================================================")
-    print(f" EXPERIMENTOS ({num_classes} CLASSES | {mode_str}) CONCLUIDOS!")
+    print(f" EXPERIMENTS ({num_classes} CLASSES | {mode_str}) FINISHED SUCCESSFULLY!")
     print("============================================================\n")
 
 
@@ -203,11 +205,11 @@ def run_full_benchmark(n_trials: int = 15, seeds: list = None):
         seeds = [42]
 
     print("\n" + "=" * 75)
-    print(" INICIANDO BENCHMARK COMPLETO DO ARTIGO (TUDO)")
-    print(" Granularidades : 6, 4 e 2 Classes")
-    print(" Modos          : SEM SMOTE e COM SMOTE")
-    print(" Modelos        : DecisionTree, RandomForest, ExtraTrees,")
-    print("                  GradientBoosting, LightGBM, XGBoost")
+    print(" STARTING COMPLETE BENCHMARK")
+    print(" Granularities : 6, 4, and 2 Classes")
+    print(" Modes         : WITHOUT SMOTE and WITH SMOTE")
+    print(" Models        : DecisionTree, RandomForest, ExtraTrees,")
+    print("                 GradientBoosting, AdaBoost, LightGBM, XGBoost")
     print("=" * 75)
 
     for use_smote in [False, True]:
@@ -221,14 +223,14 @@ def run_full_benchmark(n_trials: int = 15, seeds: list = None):
             )
 
     print("\n" + "=" * 75)
-    print(" BENCHMARK COMPLETO CONCLUÍDO COM SUCESSO!")
-    print(" Todos os resultados e figuras foram salvos na pasta 'Results/'")
+    print(" COMPLETE BENCHMARK COMPLETED SUCCESSFULLY!")
+    print(" All reports, plots, and confusion matrices saved to 'Results/'")
     print("=" * 75 + "\n")
 
 
 def display_menu():
     """
-    Displays the CLI interactive terminal menu.
+    Displays the CLI interactive terminal menu in English without emojis.
     """
     n_trials = 15
     use_smote = False
@@ -236,36 +238,36 @@ def display_menu():
     multi_seeds = False
 
     while True:
-        mode_label = "COM SMOTE" if use_smote else "SEM SMOTE"
+        mode_label = "WITH SMOTE" if use_smote else "WITHOUT SMOTE"
         seeds = [42, 100, 2024] if multi_seeds else [42]
-        seed_label = f"Múltiplas ({seeds})" if multi_seeds else "Única (42)"
+        seed_label = f"Multiple ({seeds})" if multi_seeds else "Single (42)"
 
         print("\n" + "=" * 75)
-        print("    PIPELINE DE TREINAMENTO 5G - TREE MODELS & NOVO ARTIGO")
+        print("    5G STREAMING PREDICTION - TREE-BASED MODELS PIPELINE")
         print("=" * 75)
-        print(f" Granularidade Atual   : [{current_num_classes} Classes] {CLASSES_BY_CONFIG.get(current_num_classes)}")
-        print(f" Modo Atual de Dataset : [{mode_label}]")
-        print(f" Trials do Optuna      : [{n_trials}]")
-        print(f" Avaliação de Sementes : [{seed_label}]")
+        print(f" Current Granularity : [{current_num_classes} Classes] {CLASSES_BY_CONFIG.get(current_num_classes)}")
+        print(f" Current Mode        : [{mode_label}]")
+        print(f" Optuna Trials       : [{n_trials}]")
+        print(f" Seeds Evaluation    : [{seed_label}]")
         print("-" * 75)
-        print(" [1] Executar Pipeline para a configuração atual")
-        print(" [2] Executar TODOS os Cenários e Classes (6, 4 e 2) no Modo Atual")
-        print(" [3] 🔥 EXECUTAR BENCHMARK COMPLETO (6, 4 e 2 Classes x SEM SMOTE e COM SMOTE)")
-        print(" [4] Selecionar Granularidade de Classes (2, 4 ou 6)")
-        print(" [5] Selecionar um Cenário Específico")
-        print(" [6] Selecionar um Modelo de Árvore Específico")
-        print(" [7] Alternar Modo de Dataset (SEM SMOTE / COM SMOTE)")
-        print(" [8] Configurar Quantidade de Trials do Optuna (Atual: {})".format(n_trials))
-        print(" [9] Alternar Modo de Múltiplas Sementes (Média ± Desvio Padrão)")
+        print(" [1] Run Pipeline for Current Configuration")
+        print(" [2] Run All Scenarios and Classes (6, 4, and 2) in Current Mode")
+        print(" [3] Run Complete Benchmark (6, 4, 2 Classes x WITHOUT and WITH SMOTE)")
+        print(" [4] Select Class Granularity (2, 4, or 6)")
+        print(" [5] Select a Specific Scenario")
+        print(" [6] Select a Specific Tree Model")
+        print(" [7] Toggle Dataset Mode (WITHOUT SMOTE / WITH SMOTE)")
+        print(" [8] Set Number of Optuna Trials (Current: {})".format(n_trials))
+        print(" [9] Toggle Multi-Seed Evaluation (Mean +- Std)")
         print("-" * 75)
-        print(" [10] 🛠️  Gerar Datasets das Classes (2, 4 e 6 Classes a partir dos dados brutos)")
-        print(" [11] ⚖️  Gerar Datasets Balanceados com SMOTE (para 2, 4 e 6 Classes)")
-        print(" [12] 📊 Gerar Tabelas de Estatísticas e Caracterização do Dataset")
-        print(" [13] 🧪 Rodar Teste Rápido de Validação (2 Trials / Matriz de Confusão)")
-        print(" [0] Sair")
+        print(" [10] Generate Resolution Datasets (2, 4, and 6 Classes from raw data)")
+        print(" [11] Generate SMOTE Datasets (Balanced for 2, 4, and 6 Classes)")
+        print(" [12] Generate Dataset Characterization and Descriptive Statistics Tables")
+        print(" [13] Run Quick Test Run (2 Trials / Confusion Matrix)")
+        print(" [0] Exit")
         print("=" * 75)
 
-        choice = input("Escolha uma opção: ").strip()
+        choice = input("Enter choice: ").strip()
 
         if choice == "1":
             run_experiment(
@@ -285,11 +287,11 @@ def display_menu():
         elif choice == "3":
             run_full_benchmark(n_trials=n_trials, seeds=seeds)
         elif choice == "4":
-            print("\nEscolha a quantidade de classes:")
-            print(" [1] 2 Classes (SD, HD_Plus)")
-            print(" [2] 4 Classes (Low_SD, SD_HD, FHD, 4K)")
+            print("\nSelect class granularity:")
+            print(" [1] 2 Classes (SD, HD)")
+            print(" [2] 4 Classes (SD, HD, FHD, 4K)")
             print(" [3] 6 Classes (144p, 360p, 480p, 720p, 1080p, 4K)")
-            cls_opt = input("Opção: ").strip()
+            cls_opt = input("Choice: ").strip()
             if cls_opt == "1":
                 current_num_classes = 2
             elif cls_opt == "2":
@@ -297,14 +299,14 @@ def display_menu():
             elif cls_opt == "3":
                 current_num_classes = 6
             else:
-                print("[ERRO] Opção inválida.")
-            print(f"✅ Configuração definida para: {current_num_classes} classes.")
+                print("[ERROR] Invalid choice.")
+            print(f"Configuration updated to: {current_num_classes} classes.")
         elif choice == "5":
-            print("\nCenários disponíveis:")
+            print("\nAvailable scenarios:")
             datasets_list = list(get_dataset_map(current_num_classes, use_smote).keys())
             for idx, ds in enumerate(datasets_list, 1):
                 print(f"  [{idx}] {ds}")
-            ds_choice = input("Selecione o número do cenário: ").strip()
+            ds_choice = input("Select scenario number: ").strip()
             if ds_choice.isdigit() and 1 <= int(ds_choice) <= len(datasets_list):
                 selected_ds = [datasets_list[int(ds_choice) - 1]]
                 run_experiment(
@@ -315,12 +317,12 @@ def display_menu():
                     seeds=seeds,
                 )
             else:
-                print("[ERRO] Opção de cenário inválida.")
+                print("[ERROR] Invalid scenario choice.")
         elif choice == "6":
-            print("\nModelos baseados em árvore disponíveis:")
+            print("\nAvailable tree-based models:")
             for idx, m in enumerate(TREE_MODELS, 1):
                 print(f"  [{idx}] {m}")
-            m_choice = input("Selecione o número do modelo: ").strip()
+            m_choice = input("Select model number: ").strip()
             if m_choice.isdigit() and 1 <= int(m_choice) <= len(TREE_MODELS):
                 selected_m = [TREE_MODELS[int(m_choice) - 1]]
                 run_experiment(
@@ -331,33 +333,34 @@ def display_menu():
                     seeds=seeds,
                 )
             else:
-                print("[ERRO] Opção de modelo inválida.")
+                print("[ERROR] Invalid model choice.")
         elif choice == "7":
             use_smote = not use_smote
-            new_mode = "COM SMOTE" if use_smote else "SEM SMOTE"
-            print(f"✅ Modo de dataset alterado para: {new_mode}")
+            new_mode = "WITH SMOTE" if use_smote else "WITHOUT SMOTE"
+            print(f"Dataset mode switched to: {new_mode}")
         elif choice == "8":
-            val = input("Digite o novo número de trials do Optuna: ").strip()
+            val = input("Enter new number of Optuna trials: ").strip()
             if val.isdigit() and int(val) > 0:
                 n_trials = int(val)
-                print(f"✅ Número de trials alterado para: {n_trials}")
+                print(f"Number of trials updated to: {n_trials}")
             else:
-                print("[ERRO] Valor inválido.")
+                print("[ERROR] Invalid input.")
         elif choice == "9":
             multi_seeds = not multi_seeds
-            print(f"✅ Múltiplas sementes: {'ATIVADO (42, 100, 2024)' if multi_seeds else 'DESATIVADO (42)'}")
+            status_str = "ENABLED (42, 100, 2024)" if multi_seeds else "DISABLED (42)"
+            print(f"Multi-seed evaluation: {status_str}")
         elif choice == "10":
-            print("\n[GERAÇÃO] Gerando datasets para 2, 4 e 6 classes a partir dos dados brutos...")
+            print("\n[GENERATION] Generating resolution datasets (2, 4, and 6 classes) from raw data...")
             generate_all_resolution_datasets()
-            print("✅ Datasets gerados com sucesso!")
+            print("Datasets generated successfully!")
         elif choice == "11":
-            print("\n[SMOTE] Gerando datasets balanceados com SMOTE para 2, 4 e 6 classes...")
+            print("\n[SMOTE] Generating balanced SMOTE datasets for 2, 4, and 6 classes...")
             generate_smote_for_all()
-            print("✅ Datasets com SMOTE gerados com sucesso!")
+            print("SMOTE datasets generated successfully!")
         elif choice == "12":
             generate_dataset_characterization()
         elif choice == "13":
-            print("\n[TEST] Executando teste rápido de validação com geração de figuras...")
+            print("\n[TEST] Running quick validation test run with figure generation...")
             run_experiment(
                 num_classes=current_num_classes,
                 datasets_to_run=["Amazon Static"],
@@ -368,25 +371,25 @@ def display_menu():
                 generate_plots=True,
             )
         elif choice == "0":
-            print("Encerrando pipeline. Até logo!")
+            print("Exiting pipeline. Goodbye!")
             sys.exit(0)
         else:
-            print("[ERRO] Opção inválida. Tente novamente.")
+            print("[ERROR] Invalid option. Please try again.")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Pipeline de Treinamento Tree-Based para Predição de Streaming 5G")
-    parser.add_argument("--test-run", action="store_true", help="Executa um teste rápido para verificar funcionamento.")
-    parser.add_argument("--all", action="store_true", help="Executa o pipeline completo sem menu.")
-    parser.add_argument("--classes", type=int, choices=[2, 4, 6], default=6, help="Número de classes de resolução (2, 4 ou 6).")
-    parser.add_argument("--all-classes", action="store_true", help="Executa iterativamente para 6, 4 e 2 classes no modo atual.")
-    parser.add_argument("--full-benchmark", action="store_true", help="Executa benchmark completo: 6, 4 e 2 classes, SEM SMOTE e COM SMOTE.")
-    parser.add_argument("--n-trials", type=int, default=15, help="Número de trials para Optuna (padrão: 15).")
-    parser.add_argument("--smote", action="store_true", help="Utiliza os datasets gerados com SMOTE.")
-    parser.add_argument("--multi-seeds", action="store_true", help="Avalia em 3 sementes (42, 100, 2024) calculando média e desvio padrão.")
-    parser.add_argument("--generate-datasets", action="store_true", help="Gera os datasets derivados de 2, 4 e 6 classes.")
-    parser.add_argument("--generate-smote", action="store_true", help="Gera os datasets balanceados com SMOTE.")
-    parser.add_argument("--dataset-stats", action="store_true", help="Gera as tabelas de caracterização do dataset.")
+    parser = argparse.ArgumentParser(description="Tree-Based ML Pipeline for 5G Video Streaming Quality Prediction")
+    parser.add_argument("--test-run", action="store_true", help="Run a quick validation test run.")
+    parser.add_argument("--all", action="store_true", help="Run the pipeline for specified classes without interactive menu.")
+    parser.add_argument("--classes", type=int, choices=[2, 4, 6], default=6, help="Target number of resolution classes (2, 4, or 6).")
+    parser.add_argument("--all-classes", action="store_true", help="Iteratively run across 6, 4, and 2 classes in current mode.")
+    parser.add_argument("--full-benchmark", action="store_true", help="Run full benchmark across 6, 4, and 2 classes, WITHOUT and WITH SMOTE.")
+    parser.add_argument("--n-trials", type=int, default=15, help="Number of Optuna optimization trials (default: 15).")
+    parser.add_argument("--smote", action="store_true", help="Use SMOTE-balanced training datasets.")
+    parser.add_argument("--multi-seeds", action="store_true", help="Evaluate across multiple seeds (42, 100, 2024) to report Mean +- Std.")
+    parser.add_argument("--generate-datasets", action="store_true", help="Generate 2, 4, and 6 class datasets from raw measurements.")
+    parser.add_argument("--generate-smote", action="store_true", help="Generate SMOTE balanced datasets for all granularities.")
+    parser.add_argument("--dataset-stats", action="store_true", help="Generate dataset summary and descriptive statistics tables.")
 
     args = parser.parse_args()
     seeds = [42, 100, 2024] if args.multi_seeds else [42]
@@ -400,7 +403,7 @@ def main():
     elif args.full_benchmark:
         run_full_benchmark(n_trials=args.n_trials, seeds=seeds)
     elif args.test_run:
-        print("[TEST] Flag --test-run detectada. Executando teste de validação...")
+        print("[TEST] Flag --test-run detected. Running quick validation test...")
         run_experiment(
             num_classes=args.classes,
             datasets_to_run=["Amazon Static"],
@@ -411,11 +414,11 @@ def main():
             generate_plots=True,
         )
     elif args.all_classes:
-        print("[RUN] Executando pipeline para 6, 4 e 2 classes no modo selecionado...")
+        print("[RUN] Executing pipeline for 6, 4, and 2 classes in selected mode...")
         for n_cls in [6, 4, 2]:
             run_experiment(num_classes=n_cls, n_trials=args.n_trials, use_smote=args.smote, seeds=seeds)
     elif args.all:
-        print(f"[RUN] Flag --all detectada ({args.classes} classes)...")
+        print(f"[RUN] Flag --all detected ({args.classes} classes)...")
         run_experiment(num_classes=args.classes, n_trials=args.n_trials, use_smote=args.smote, seeds=seeds)
     else:
         display_menu()

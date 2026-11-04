@@ -10,8 +10,8 @@ DATASETS_DIR = Path("datasets")
 
 CLASSES_BY_CONFIG = {
     6: ["144p", "360p", "480p", "720p", "1080p", "4K"],
-    4: ["Low_SD", "SD_HD", "FHD", "4K"],
-    2: ["SD", "HD_Plus"],
+    4: ["SD", "HD", "FHD", "4K"],
+    2: ["SD", "HD"],
 }
 
 # Alias for default 6 classes

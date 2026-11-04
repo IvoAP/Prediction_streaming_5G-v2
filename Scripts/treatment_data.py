@@ -29,22 +29,22 @@ DICTIONARY_RESOLUTION_6_CLASSES = {
 }
 
 # 4 classes mapping
-# <1.1 -> Low_SD (144p + 360p)
-# 1.1-5.0 -> SD_HD (480p + 720p)
+# <1.1 -> SD (144p + 360p)
+# 1.1-5.0 -> HD (480p + 720p)
 # 5.0-20.0 -> FHD (1080p)
 # >=20.0 -> 4K (4K)
 DICTIONARY_RESOLUTION_4_CLASSES = {
     20: "4K",
     5: "FHD",
-    1.1: "SD_HD",
-    0.1: "Low_SD",
+    1.1: "HD",
+    0.1: "SD",
 }
 
 # 2 classes mapping
 # <2.5 -> SD (<720p)
-# >=2.5 -> HD_Plus (>=720p)
+# >=2.5 -> HD (>=720p)
 DICTIONARY_RESOLUTION_2_CLASSES = {
-    2.5: "HD_Plus",
+    2.5: "HD",
     0.1: "SD",
 }
 
@@ -91,9 +91,9 @@ def get_resolution_class(value, num_classes=6):
 
     elif num_classes == 4:
         if value_mbps < 1.1:
-            return "Low_SD"
+            return "SD"
         if value_mbps < 5.0:
-            return "SD_HD"
+            return "HD"
         if value_mbps < 20.0:
             return "FHD"
         return "4K"
@@ -101,7 +101,7 @@ def get_resolution_class(value, num_classes=6):
     elif num_classes == 2:
         if value_mbps < 2.5:
             return "SD"
-        return "HD_Plus"
+        return "HD"
 
     else:
         raise ValueError(f"Unsupported num_classes: {num_classes}. Choose from [2, 4, 6].")

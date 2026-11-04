@@ -12,6 +12,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     matthews_corrcoef,
+    cohen_kappa_score,
     log_loss,
     roc_auc_score,
     confusion_matrix,
@@ -109,6 +110,7 @@ def evaluate_model(
     precision_weighted = precision_score(y_test, y_pred, average="weighted", zero_division=0)
     recall_weighted = recall_score(y_test, y_pred, average="weighted", zero_division=0)
     mcc = matthews_corrcoef(y_test, y_pred)
+    kappa = cohen_kappa_score(y_test, y_pred)
 
     loss = np.nan
     roc_auc = np.nan
@@ -140,6 +142,7 @@ def evaluate_model(
         "precision_weighted": precision_weighted,
         "recall_weighted": recall_weighted,
         "mcc": mcc,
+        "cohen_kappa": kappa,
         "roc_auc": roc_auc,
         "log_loss": loss,
         "train_time_seconds": train_time,
