@@ -1,70 +1,187 @@
-## Generate Video-Class Datasets with UV
+# Prediction Streaming 5G - Tree-Based Models Suite (2, 4, and 6 Classes)
 
-This project converts the `DL_bitrate` column into video quality classes and writes new CSV files for **2, 4, and 6 classes**.
+[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
+[![Package Manager](https://img.shields.io/badge/uv-fast%20packaging-purple.svg)](https://github.com/astral-sh/uv)
+[![Models](https://img.shields.io/badge/ML-Tree--Based-success.svg)]()
+[![Optimization](https://img.shields.io/badge/Optuna-Hyperparameter%20Tuning-orange.svg)](https://optuna.org/)
 
-### Run with UV
+This repository contains the complete Machine Learning pipeline for predicting video streaming quality over real-world 5G networks based on client-side physical-layer radio frequency (RF) measurements. The evaluation considers both **Static** and **Vehicular/Driving** mobility scenarios across two major commercial streaming providers: **Amazon Prime Video** and **Netflix**.
 
-From the project root, run:
+The methodology investigates the impact of target resolution granularities (**6, 4, and 2 classes**), features automated hyperparameter optimization via **Optuna**, class balancing using **SMOTE**, multi-seed evaluations (Mean +- Std), and automatic generation of publication-ready figures (normalized confusion matrices and comparison charts).
 
+---
+
+## Project Overview & Research Context
+
+The primary goal is to proactively estimate achievable video delivery quality tiers from 5G physical radio link KPIs:
+- `RSRP` (Reference Signal Received Power)
+- `RSRQ` (Reference Signal Received Quality)
+- `SNR` (Signal-to-Noise Ratio)
+- `CQI` (Channel Quality Indicator)
+- `RSSI` (Received Signal Strength Indicator)
+
+### Evaluated Resolution Granularities:
+
+| Granularity | Target Classes | Aggregated Resolutions | Bitrate Range (YouTube Proxy) |
+| :--- | :--- | :--- | :--- |
+| **6 Classes** | `144p`, `360p`, `480p`, `720p`, `1080p`, `4K` | Individual quality tiers | `<0.7`, `0.7–1.1`, `1.1–2.5`, `2.5–5`, `5–20`, `≥20 Mbps` |
+| **4 Classes** | `SD`, `HD`, `FHD`, `4K` | • `SD` (`144p` + `360p`)<br>• `HD` (`480p` + `720p`)<br>• `FHD` (`1080p`)<br>• `4K` (`4K`) | `<1.1 Mbps`<br>`1.1 – 5.0 Mbps`<br>`5.0 – 20.0 Mbps`<br>`≥ 20.0 Mbps` |
+| **2 Classes** | `SD`, `HD` | • `SD` (`144p`, `360p`, `480p`)<br>• `HD` (`720p`, `1080p`, `4K`) | `<2.5 Mbps` (Standard Definition)<br>`≥2.5 Mbps` (High Definition) |
+
+---
+
+## Environment Setup & Installation
+
+This project is managed with **[`uv`](https://github.com/astral-sh/uv)**, an extremely fast Python package manager and resolver.
+
+### 1. Install `uv`
+
+If you do not have `uv` installed, install it using the official standalone installer:
+
+* **Windows (PowerShell):**
+  ```powershell
+  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+  ```
+
+* **macOS / Linux:**
+  ```bash
+  curl -LsSf https://astral.sh/uv/install.sh | sh
+  ```
+
+* **Via pip (alternative):**
+  ```bash
+  pip install uv
+  ```
+
+### 2. Sync Dependencies
+Once `uv` is installed, navigate to the project directory and run:
 ```powershell
-uv run -m Scripts.treatment_data
+uv sync
+```
+This automatically sets up the virtual environment with all required dependencies (Optuna, Scikit-learn, XGBoost, LightGBM, Imbalanced-learn, Seaborn, etc.).
+
+---
+
+## Repository Structure
+
+```text
+Prediction_streaming_5G-v2/
+├── datasets/                                 # Centralized datasets directory
+│   ├── Amazon/                               # Raw Amazon recordings (Static and Driving)
+│   ├── Netflix/                              # Raw Netflix recordings (Static and Driving)
+│   ├── Amazon-{2,4,6}/                       # Generated datasets per class granularity (gitignored)
+│   ├── Netflix-{2,4,6}/                      # Generated datasets per class granularity (gitignored)
+│   └── *-SMOTE/                              # Balanced datasets with SMOTE (gitignored)
+├── Scripts/
+│   ├── treatment_data.py                     # Bitrate-to-class dataset generator (2, 4, and 6 classes)
+│   ├── smote_treatment.py                    # Synthetic minority oversampling (SMOTE)
+│   ├── dataset_statistics.py                 # Summary stats of mobility, RF features, and class counts
+│   ├── data_loader.py                        # Dataset loading and stratified 80/20 train/test splitting
+│   ├── models_optuna.py                      # Optuna Bayesian hyperparameter optimization
+│   ├── evaluation.py                         # Evaluation metrics, Cohen's Kappa, CMs, and comparison charts
+│   └── training_pipeline.py                  # Main runner and interactive CLI menu
+├── Results/                                  # Exported CSV reports and figures
+│   ├── dataset_statistics/                   # Characterization tables
+│   ├── classes_2/                            # Results for 2 classes (With_SMOTE / Without_SMOTE)
+│   ├── classes_4/                            # Results for 4 classes (With_SMOTE / Without_SMOTE)
+│   └── classes_6/                            # Results for 6 classes (With_SMOTE / Without_SMOTE)
+├── pyproject.toml / uv.lock                  # Project dependencies lockfile
+└── README.md
 ```
 
-Alternative entry point:
+---
 
+## Running the Experiments
+
+### 1. Interactive Terminal Menu (Recommended)
+Launch the interactive terminal interface:
 ```powershell
-uv run -m src.main
+uv run python -m Scripts.training_pipeline
 ```
 
-Both commands generate class-based outputs for:
+#### Menu Overview:
+```text
+===========================================================================
+    5G STREAMING PREDICTION - TREE-BASED MODELS PIPELINE
+===========================================================================
+ Current Granularity : [6 Classes] ['144p', '360p', '480p', '720p', '1080p', '4K']
+ Current Mode        : [WITHOUT SMOTE]
+ Optuna Trials       : [15]
+ Seeds Evaluation    : [Single (42)]
+---------------------------------------------------------------------------
+ [1] Run Pipeline for Current Configuration
+ [2] Run All Scenarios and Classes (6, 4, and 2) in Current Mode
+ [3] Run Complete Benchmark (6, 4, 2 Classes x WITHOUT and WITH SMOTE)
+ [4] Select Class Granularity (2, 4, or 6)
+ [5] Select a Specific Scenario
+ [6] Select a Specific Tree Model
+ [7] Toggle Dataset Mode (WITHOUT SMOTE / WITH SMOTE)
+ [8] Set Number of Optuna Trials (Current: 15)
+ [9] Toggle Multi-Seed Evaluation (Mean +- Std)
+---------------------------------------------------------------------------
+ [10] Generate Resolution Datasets (2, 4, and 6 Classes from raw data)
+ [11] Generate SMOTE Datasets (Balanced for 2, 4, and 6 Classes)
+ [12] Generate Dataset Characterization and Descriptive Statistics Tables
+ [13] Run Quick Test Run (2 Trials / Confusion Matrix)
+ [0] Exit
+===========================================================================
+```
 
-- Amazon Static
-- Amazon Driving
-- Netflix Static
-- Netflix Driving
+---
 
-Output folders are created automatically:
+### 2. Command-Line Interface (CLI / Automation)
 
-- `Amazon-2/`, `Amazon-4/`, `Amazon-6/`
-- `Netflix-2/`, `Netflix-4/`, `Netflix-6/`
+You can also run tasks directly using CLI flags:
 
-Each run prints `class_count` in the terminal for validation.
+* **Generate all resolution datasets (2, 4, and 6 classes):**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --generate-datasets
+  ```
 
-## Video Class Definition Format
+* **Generate SMOTE balanced datasets:**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --generate-smote
+  ```
 
-Class assignment is based on `DL_bitrate / 1000` (Mbps), using these bitrate ranges:
+* **Generate dataset summary tables for the paper:**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --dataset-stats
+  ```
 
-- `(0, 0.7)` -> key `0.1`
-- `[0.7, 1.1)` -> key `0.7`
-- `[1.1, 2.5)` -> key `1.1`
-- `[2.5, 5)` -> key `2.5`
-- `[5, 20)` -> key `5`
-- `[20, +inf)` -> key `20`
-- `<= 0` or invalid/missing -> class `0`
+* **Run the Full Benchmark (All 6, 4, and 2 classes x Without and With SMOTE):**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --full-benchmark --n-trials 15
+  ```
 
-### 6-Class Mapping
+* **Run Full Benchmark with Multi-Seed Evaluation (Seeds 42, 100, 2024 for Mean +- Std):**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --full-benchmark --multi-seeds --n-trials 15
+  ```
 
-- `0.1` -> `144p`
-- `0.7` -> `360p`
-- `1.1` -> `480p`
-- `2.5` -> `720p`
-- `5` -> `1080p`
-- `20` -> `4K`
+* **Fast validation run (2 trials + figure generation):**
+  ```powershell
+  uv run python -m Scripts.training_pipeline --test-run --classes 4
+  ```
 
-### 4-Class Mapping
+---
 
-- `0.1` -> `Low`
-- `0.7` -> `Low`
-- `1.1` -> `HD`
-- `2.5` -> `HD`
-- `5` -> `1080p`
-- `20` -> `4K`
+## Output Metrics and Reports
 
-### 2-Class Mapping
+All experimental findings are automatically written to `Results/`:
 
-- `0.1` -> `Low`
-- `0.7` -> `Low`
-- `1.1` -> `Low`
-- `2.5` -> `High`
-- `5` -> `High`
-- `20` -> `High`
+1. **`model_results_global.csv`**:
+   - Comprehensive performance: `accuracy`, `balanced_accuracy`, `f1_score_macro`, `f1_score_weighted`, `precision_weighted`, `recall_weighted`, `mcc`, `cohen_kappa`, `roc_auc`, `log_loss`.
+   - Computational cost: `train_time_seconds`, `inference_time_seconds`, `inference_time_per_sample_seconds`.
+   - Variance metrics (when using `--multi-seeds`): `balanced_accuracy_std`, `f1_macro_std`.
+
+2. **`model_results_per_class.csv`**:
+   - Individual class breakdown: `precision`, `recall`, and `f1_score`.
+
+3. **`optuna_best_params.csv`**:
+   - Best hyperparameter configurations discovered during cross-validation.
+
+4. **`confusion_matrices/`**:
+   - High-resolution (300 DPI) normalized confusion matrices exported in both **PNG** and publication-ready **PDF**.
+
+5. **`figures/`**:
+   - Macro F1-score comparison charts across models and scenarios.

@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+﻿# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
@@ -218,9 +218,15 @@ __marimo__/
 .streamlit/secrets.toml
 
 # Generated class datasets
-Amazon-2/
-Amazon-4/
-Amazon-6/
-Netflix-2/
-Netflix-4/
-Netflix-6/
+datasets/*-2/
+datasets/*-4/
+datasets/*-6/
+datasets/*-2-SMOTE/
+datasets/*-4-SMOTE/
+datasets/*-6-SMOTE/
+datasets/Amazon-*/
+datasets/Netflix-*/
+
+# Results and test runs
+Results/
+Tests/
