@@ -7,7 +7,7 @@
 
 This repository contains the complete Machine Learning pipeline for predicting video streaming quality over real-world 5G networks based on client-side physical-layer radio frequency (RF) measurements. The evaluation considers both **Static** and **Vehicular/Driving** mobility scenarios across two major commercial streaming providers: **Amazon Prime Video** and **Netflix**.
 
-The methodology investigates the impact of target resolution granularities (**6, 4, and 2 classes**), features automated hyperparameter optimization via **Optuna**, class balancing using **SMOTE**, multi-seed evaluations (Mean +- Std), and automatic generation of publication-ready figures (normalized confusion matrices and comparison charts).
+The methodology investigates the impact of target resolution granularities (**6, 4, and 2 classes**), features automated hyperparameter optimization via **Optuna**, rigorous class balancing using **SMOTE** (applied strictly to the training partition to avoid data leakage), multi-seed evaluations (Mean ± Std), and automatic generation of publication-ready figures (normalized confusion matrices and comparison charts).
 
 ---
 
@@ -27,6 +27,14 @@ The primary goal is to proactively estimate achievable video delivery quality ti
 | **6 Classes** | `144p`, `360p`, `480p`, `720p`, `1080p`, `4K` | Individual quality tiers | `<0.7`, `0.7–1.1`, `1.1–2.5`, `2.5–5`, `5–20`, `≥20 Mbps` |
 | **4 Classes** | `SD`, `HD`, `FHD`, `4K` | • `SD` (`144p` + `360p`)<br>• `HD` (`480p` + `720p`)<br>• `FHD` (`1080p`)<br>• `4K` (`4K`) | `<1.1 Mbps`<br>`1.1 – 5.0 Mbps`<br>`5.0 – 20.0 Mbps`<br>`≥ 20.0 Mbps` |
 | **2 Classes** | `SD`, `HD` | • `SD` (`144p`, `360p`, `480p`)<br>• `HD` (`720p`, `1080p`, `4K`) | `<2.5 Mbps` (Standard Definition)<br>`≥2.5 Mbps` (High Definition) |
+
+---
+
+## Class Imbalance & Leakage-Free SMOTE Pipeline
+
+To counter extreme class imbalances (e.g., `144p` representing ~80% and `4K` less than 1% of raw measurements):
+- **Stratified Splitting First**: Datasets are partitioned into 80% train and 20% test strictly **before** applying any synthetic oversampling.
+- **100% Authentic Test Set**: The test split (`X_test, y_test`) is never subjected to SMOTE, ensuring evaluation reflects authentic real-world 5G traffic distributions without data leakage.
 
 ---
 
@@ -70,13 +78,12 @@ Prediction_streaming_5G-v2/
 │   ├── Amazon/                               # Raw Amazon recordings (Static and Driving)
 │   ├── Netflix/                              # Raw Netflix recordings (Static and Driving)
 │   ├── Amazon-{2,4,6}/                       # Generated datasets per class granularity (gitignored)
-│   ├── Netflix-{2,4,6}/                      # Generated datasets per class granularity (gitignored)
-│   └── *-SMOTE/                              # Balanced datasets with SMOTE (gitignored)
+│   └── Netflix-{2,4,6}/                      # Generated datasets per class granularity (gitignored)
 ├── Scripts/
 │   ├── treatment_data.py                     # Bitrate-to-class dataset generator (2, 4, and 6 classes)
-│   ├── smote_treatment.py                    # Synthetic minority oversampling (SMOTE)
+│   ├── smote_treatment.py                    # Reference minority oversampling (SMOTE)
 │   ├── dataset_statistics.py                 # Summary stats of mobility, RF features, and class counts
-│   ├── data_loader.py                        # Dataset loading and stratified 80/20 train/test splitting
+│   ├── data_loader.py                        # Dataset loading, train-only SMOTE, and stratified 80/20 split
 │   ├── models_optuna.py                      # Optuna Bayesian hyperparameter optimization
 │   ├── evaluation.py                         # Evaluation metrics, Cohen's Kappa, CMs, and comparison charts
 │   └── training_pipeline.py                  # Main runner and interactive CLI menu
@@ -138,11 +145,6 @@ You can also run tasks directly using CLI flags:
   uv run python -m Scripts.training_pipeline --generate-datasets
   ```
 
-* **Generate SMOTE balanced datasets:**
-  ```powershell
-  uv run python -m Scripts.training_pipeline --generate-smote
-  ```
-
 * **Generate dataset summary tables for the paper:**
   ```powershell
   uv run python -m Scripts.training_pipeline --dataset-stats
@@ -153,7 +155,7 @@ You can also run tasks directly using CLI flags:
   uv run python -m Scripts.training_pipeline --full-benchmark --n-trials 15
   ```
 
-* **Run Full Benchmark with Multi-Seed Evaluation (Seeds 42, 100, 2024 for Mean +- Std):**
+* **Run Full Benchmark with Multi-Seed Evaluation (Seeds 42, 100, 2024 for Mean ± Std):**
   ```powershell
   uv run python -m Scripts.training_pipeline --full-benchmark --multi-seeds --n-trials 15
   ```

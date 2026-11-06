@@ -21,13 +21,12 @@ from Scripts.dataset_statistics import generate_dataset_characterization
 from Scripts.treatment_data import generate_all_resolution_datasets
 from Scripts.smote_treatment import generate_smote_for_all
 
-# Exclusively Tree-Based Models
+# Exclusively Tree-Based Models (AdaBoost removed due to poor multi-class performance)
 TREE_MODELS = [
     "DecisionTree",
     "RandomForest",
     "ExtraTrees",
     "GradientBoosting",
-    "AdaBoost",
     "LightGBM",
     "XGBoost",
 ]
@@ -209,7 +208,7 @@ def run_full_benchmark(n_trials: int = 15, seeds: list = None):
     print(" Granularities : 6, 4, and 2 Classes")
     print(" Modes         : WITHOUT SMOTE and WITH SMOTE")
     print(" Models        : DecisionTree, RandomForest, ExtraTrees,")
-    print("                 GradientBoosting, AdaBoost, LightGBM, XGBoost")
+    print("                 GradientBoosting, LightGBM, XGBoost")
     print("=" * 75)
 
     for use_smote in [False, True]:

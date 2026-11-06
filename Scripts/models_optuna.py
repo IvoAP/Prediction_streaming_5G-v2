@@ -13,7 +13,6 @@ from sklearn.ensemble import (
     RandomForestClassifier,
     ExtraTreesClassifier,
     GradientBoostingClassifier,
-    AdaBoostClassifier,
 )
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
@@ -168,28 +167,6 @@ def optimize_gradient_boosting(X_train, y_train, n_trials=10):
     return study.best_params
 
 
-def optimize_adaboost(X_train, y_train, n_trials=10):
-    def objective(trial):
-        n_estimators = trial.suggest_int("n_estimators", 50, 300)
-        learning_rate = trial.suggest_float("learning_rate", 0.01, 1.0, log=True)
-
-        model = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("classifier", AdaBoostClassifier(
-                n_estimators=n_estimators,
-                learning_rate=learning_rate,
-                random_state=42,
-            ))
-        ])
-
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
-        return scores.mean()
-
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    return study.best_params
-
-
 def optimize_lightgbm(X_train, y_train, n_trials=10):
     def objective(trial):
         n_estimators = trial.suggest_int("n_estimators", 50, 300)
@@ -266,7 +243,6 @@ MODEL_OPTIMIZERS = {
     "RandomForest": optimize_rf,
     "ExtraTrees": optimize_extra_trees,
     "GradientBoosting": optimize_gradient_boosting,
-    "AdaBoost": optimize_adaboost,
     "LightGBM": optimize_lightgbm,
     "XGBoost": optimize_xgboost,
 }
@@ -300,12 +276,6 @@ def build_final_model(model_name: str, best_params: dict):
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("classifier", GradientBoostingClassifier(**params, random_state=42))
-        ])
-
-    elif model_name == "AdaBoost":
-        return Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("classifier", AdaBoostClassifier(**params, random_state=42))
         ])
 
     elif model_name == "LightGBM":

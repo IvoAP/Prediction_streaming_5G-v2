@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
+from collections import Counter
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
+from imblearn.over_sampling import SMOTE
 
 FEATURE_COLUMNS = ["RSRP", "RSRQ", "SNR", "CQI", "RSSI"]
 TARGET_COLUMN = "resolution_class"
@@ -49,9 +52,15 @@ def load_and_preprocess_dataset(
     """
     Loads dataset for specified class configuration (2, 4, or 6),
     filters out invalid rows (class '0'), converts features to numeric,
-    and splits into train/test with stratification.
+    and splits into train/test with stratification strictly on REAL data.
+
+    If use_smote is True:
+        SMOTE is applied ONLY to the training split (X_train, y_train).
+        The test set (X_test, y_test) remains 100% authentic, real-world data,
+        preventing synthetic data leakage and guaranteeing valid evaluation metrics.
     """
-    dataset_map = get_dataset_map(num_classes=num_classes, use_smote=use_smote)
+    # Always load raw un-oversampled data to guarantee genuine train/test partitioning
+    dataset_map = get_dataset_map(num_classes=num_classes, use_smote=False)
 
     if dataset_key not in dataset_map:
         raise ValueError(f"Unknown dataset key: {dataset_key}. Available: {list(dataset_map.keys())}")
@@ -76,8 +85,26 @@ def load_and_preprocess_dataset(
     X = df_filtered[FEATURE_COLUMNS]
     y = df_filtered[TARGET_COLUMN]
 
+    # Split train and test strictly BEFORE any synthetic oversampling
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, random_state=random_state, stratify=y
     )
+
+    if use_smote:
+        # Impute missing values with median calculated only from training data
+        imputer = SimpleImputer(strategy="median")
+        X_train_imp = pd.DataFrame(imputer.fit_transform(X_train), columns=FEATURE_COLUMNS, index=X_train.index)
+        X_test_imp = pd.DataFrame(imputer.transform(X_test), columns=FEATURE_COLUMNS, index=X_test.index)
+
+        counts_before = Counter(y_train)
+        min_class_count = min(counts_before.values())
+        k_neighbors = min(5, min_class_count - 1) if min_class_count > 1 else 1
+
+        if min_class_count > 1:
+            smote = SMOTE(k_neighbors=k_neighbors, random_state=random_state)
+            X_train_res, y_train_res = smote.fit_resample(X_train_imp, y_train)
+            return X_train_res, X_test_imp, y_train_res, y_test
+
+        return X_train_imp, X_test_imp, y_train, y_test
 
     return X_train, X_test, y_train, y_test
