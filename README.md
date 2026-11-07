@@ -113,7 +113,7 @@ uv run python -m Scripts.training_pipeline
 ===========================================================================
  Current Granularity : [6 Classes] ['144p', '360p', '480p', '720p', '1080p', '4K']
  Current Mode        : [WITHOUT SMOTE]
- Optuna Trials       : [15]
+ Optuna Trials       : [25]
  Seeds Evaluation    : [Single (42)]
 ---------------------------------------------------------------------------
  [1] Run Pipeline for Current Configuration
@@ -123,7 +123,7 @@ uv run python -m Scripts.training_pipeline
  [5] Select a Specific Scenario
  [6] Select a Specific Tree Model
  [7] Toggle Dataset Mode (WITHOUT SMOTE / WITH SMOTE)
- [8] Set Number of Optuna Trials (Current: 15)
+ [8] Set Number of Optuna Trials (Current: 25)
  [9] Toggle Multi-Seed Evaluation (Mean +- Std)
 ---------------------------------------------------------------------------
  [10] Generate Resolution Datasets (2, 4, and 6 Classes from raw data)
@@ -152,12 +152,12 @@ You can also run tasks directly using CLI flags:
 
 * **Run the Full Benchmark (All 6, 4, and 2 classes x Without and With SMOTE):**
   ```powershell
-  uv run python -m Scripts.training_pipeline --full-benchmark --n-trials 15
+  uv run python -m Scripts.training_pipeline --full-benchmark --n-trials 25
   ```
 
 * **Run Full Benchmark with Multi-Seed Evaluation (Seeds 42, 100, 2024 for Mean ± Std):**
   ```powershell
-  uv run python -m Scripts.training_pipeline --full-benchmark --multi-seeds --n-trials 15
+  uv run python -m Scripts.training_pipeline --full-benchmark --multi-seeds --n-trials 25
   ```
 
 * **Fast validation run (2 trials + figure generation):**

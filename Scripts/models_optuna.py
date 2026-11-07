@@ -12,10 +12,10 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import (
     RandomForestClassifier,
     ExtraTreesClassifier,
-    GradientBoostingClassifier,
 )
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
+from catboost import CatBoostClassifier
 
 warnings.filterwarnings("ignore")
 optuna.logging.set_verbosity(optuna.logging.WARNING)
@@ -28,16 +28,27 @@ optuna.logging.set_verbosity(optuna.logging.WARNING)
 class XGBoostWrapper(BaseEstimator, ClassifierMixin):
     """
     Wrapper for XGBoost to handle arbitrary string target labels and maintain sklearn compatibility.
+    Uses tree_method='hist' for fast histogram-based execution.
     """
     def __init__(self, **xgb_params):
         self.xgb_params = xgb_params
-        self.model = XGBClassifier(**xgb_params, random_state=42, eval_metric="mlogloss", n_jobs=-1)
+        self.model = XGBClassifier(
+            **xgb_params,
+            tree_method="hist",
+            random_state=42,
+            eval_metric="mlogloss",
+            n_jobs=-1,
+        )
         self.label_encoder = LabelEncoder()
         self.classes_ = None
 
     def fit(self, X, y):
         y_enc = self.label_encoder.fit_transform(y)
         self.classes_ = self.label_encoder.classes_
+        if len(self.classes_) == 2:
+            self.model.set_params(eval_metric="logloss", objective="binary:logistic")
+        else:
+            self.model.set_params(eval_metric="mlogloss", objective="multi:softprob")
         self.model.fit(X, y_enc)
         return self
 
@@ -49,16 +60,43 @@ class XGBoostWrapper(BaseEstimator, ClassifierMixin):
         return self.model.predict_proba(X)
 
 
+class CatBoostWrapper(BaseEstimator, ClassifierMixin):
+    """
+    Wrapper for CatBoostClassifier with silent output and multi-threading.
+    """
+    def __init__(self, **cb_params):
+        self.cb_params = cb_params
+        self.model = CatBoostClassifier(
+            **cb_params,
+            random_seed=42,
+            verbose=False,
+            thread_count=-1,
+        )
+        self.classes_ = None
+
+    def fit(self, X, y):
+        self.model.fit(X, y)
+        self.classes_ = self.model.classes_
+        return self
+
+    def predict(self, X):
+        return self.model.predict(X).ravel()
+
+    def predict_proba(self, X):
+        return self.model.predict_proba(X)
+
+
 # ---------------------------------------------------------------------------
-# Optuna Objective Functions for Tree-Based Models
+# Optuna Objective Functions for Tree-Based Models (Optimizing f1_macro)
 # ---------------------------------------------------------------------------
 
-def optimize_dt(X_train, y_train, n_trials=10):
+def optimize_dt(X_train, y_train, n_trials=25):
     def objective(trial):
         max_depth = trial.suggest_int("max_depth", 3, 25)
         min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
         min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
         criterion = trial.suggest_categorical("criterion", ["gini", "entropy", "log_loss"])
+        class_weight = trial.suggest_categorical("class_weight", [None, "balanced"])
 
         model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -67,11 +105,12 @@ def optimize_dt(X_train, y_train, n_trials=10):
                 min_samples_split=min_samples_split,
                 min_samples_leaf=min_samples_leaf,
                 criterion=criterion,
+                class_weight=class_weight,
                 random_state=42,
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_macro", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -79,13 +118,14 @@ def optimize_dt(X_train, y_train, n_trials=10):
     return study.best_params
 
 
-def optimize_rf(X_train, y_train, n_trials=10):
+def optimize_rf(X_train, y_train, n_trials=25):
     def objective(trial):
-        n_estimators = trial.suggest_int("n_estimators", 50, 300)
+        n_estimators = trial.suggest_int("n_estimators", 50, 250)
         max_depth = trial.suggest_int("max_depth", 5, 25)
         min_samples_split = trial.suggest_int("min_samples_split", 2, 15)
         min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 10)
         criterion = trial.suggest_categorical("criterion", ["gini", "entropy"])
+        class_weight = trial.suggest_categorical("class_weight", [None, "balanced", "balanced_subsample"])
 
         model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -95,12 +135,13 @@ def optimize_rf(X_train, y_train, n_trials=10):
                 min_samples_split=min_samples_split,
                 min_samples_leaf=min_samples_leaf,
                 criterion=criterion,
+                class_weight=class_weight,
                 random_state=42,
                 n_jobs=-1,
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_macro", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -108,13 +149,14 @@ def optimize_rf(X_train, y_train, n_trials=10):
     return study.best_params
 
 
-def optimize_extra_trees(X_train, y_train, n_trials=10):
+def optimize_extra_trees(X_train, y_train, n_trials=25):
     def objective(trial):
-        n_estimators = trial.suggest_int("n_estimators", 50, 300)
+        n_estimators = trial.suggest_int("n_estimators", 50, 250)
         max_depth = trial.suggest_int("max_depth", 5, 25)
         min_samples_split = trial.suggest_int("min_samples_split", 2, 15)
         min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 10)
         criterion = trial.suggest_categorical("criterion", ["gini", "entropy"])
+        class_weight = trial.suggest_categorical("class_weight", [None, "balanced", "balanced_subsample"])
 
         model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -124,12 +166,13 @@ def optimize_extra_trees(X_train, y_train, n_trials=10):
                 min_samples_split=min_samples_split,
                 min_samples_leaf=min_samples_leaf,
                 criterion=criterion,
+                class_weight=class_weight,
                 random_state=42,
                 n_jobs=-1,
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_macro", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -137,44 +180,15 @@ def optimize_extra_trees(X_train, y_train, n_trials=10):
     return study.best_params
 
 
-def optimize_gradient_boosting(X_train, y_train, n_trials=10):
-    def objective(trial):
-        n_estimators = trial.suggest_int("n_estimators", 50, 250)
-        learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
-        max_depth = trial.suggest_int("max_depth", 2, 8)
-        min_samples_split = trial.suggest_int("min_samples_split", 2, 20)
-        min_samples_leaf = trial.suggest_int("min_samples_leaf", 1, 20)
-        subsample = trial.suggest_float("subsample", 0.6, 1.0)
-
-        model = Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("classifier", GradientBoostingClassifier(
-                n_estimators=n_estimators,
-                learning_rate=learning_rate,
-                max_depth=max_depth,
-                min_samples_split=min_samples_split,
-                min_samples_leaf=min_samples_leaf,
-                subsample=subsample,
-                random_state=42,
-            ))
-        ])
-
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
-        return scores.mean()
-
-    study = optuna.create_study(direction="maximize")
-    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
-    return study.best_params
-
-
-def optimize_lightgbm(X_train, y_train, n_trials=10):
+def optimize_lightgbm(X_train, y_train, n_trials=25):
     def objective(trial):
         n_estimators = trial.suggest_int("n_estimators", 50, 300)
         max_depth = trial.suggest_int("max_depth", 3, 15)
         learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
-        num_leaves = trial.suggest_int("num_leaves", 10, 64)
+        num_leaves = trial.suggest_int("num_leaves", 15, 64)
         min_child_samples = trial.suggest_int("min_child_samples", 5, 50)
         subsample = trial.suggest_float("subsample", 0.6, 1.0)
+        class_weight = trial.suggest_categorical("class_weight", [None, "balanced"])
 
         model = Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -185,13 +199,14 @@ def optimize_lightgbm(X_train, y_train, n_trials=10):
                 num_leaves=num_leaves,
                 min_child_samples=min_child_samples,
                 subsample=subsample,
+                class_weight=class_weight,
                 random_state=42,
                 verbosity=-1,
                 n_jobs=-1,
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_macro", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -199,12 +214,12 @@ def optimize_lightgbm(X_train, y_train, n_trials=10):
     return study.best_params
 
 
-def optimize_xgboost(X_train, y_train, n_trials=10):
+def optimize_xgboost(X_train, y_train, n_trials=25):
     label_encoder = LabelEncoder()
     y_encoded = label_encoder.fit_transform(y_train)
 
     def objective(trial):
-        n_estimators = trial.suggest_int("n_estimators", 50, 300)
+        n_estimators = trial.suggest_int("n_estimators", 50, 250)
         max_depth = trial.suggest_int("max_depth", 3, 12)
         learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
         subsample = trial.suggest_float("subsample", 0.6, 1.0)
@@ -220,13 +235,44 @@ def optimize_xgboost(X_train, y_train, n_trials=10):
                 subsample=subsample,
                 colsample_bytree=colsample_bytree,
                 gamma=gamma,
+                tree_method="hist",
                 random_state=42,
                 eval_metric="mlogloss",
                 n_jobs=-1,
             ))
         ])
 
-        scores = cross_val_score(model, X_train, y_encoded, cv=5, scoring="balanced_accuracy", n_jobs=-1)
+        scores = cross_val_score(model, X_train, y_encoded, cv=5, scoring="f1_macro", n_jobs=-1)
+        return scores.mean()
+
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
+    return study.best_params
+
+
+def optimize_catboost(X_train, y_train, n_trials=25):
+    def objective(trial):
+        iterations = trial.suggest_int("iterations", 100, 350)
+        depth = trial.suggest_int("depth", 4, 10)
+        learning_rate = trial.suggest_float("learning_rate", 0.01, 0.3, log=True)
+        l2_leaf_reg = trial.suggest_float("l2_leaf_reg", 1.0, 10.0)
+        auto_class_weights = trial.suggest_categorical("auto_class_weights", [None, "Balanced"])
+
+        model = Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", CatBoostClassifier(
+                iterations=iterations,
+                depth=depth,
+                learning_rate=learning_rate,
+                l2_leaf_reg=l2_leaf_reg,
+                auto_class_weights=auto_class_weights,
+                random_seed=42,
+                verbose=False,
+                thread_count=-1,
+            ))
+        ])
+
+        scores = cross_val_score(model, X_train, y_train, cv=5, scoring="f1_macro", n_jobs=-1)
         return scores.mean()
 
     study = optuna.create_study(direction="maximize")
@@ -242,9 +288,9 @@ MODEL_OPTIMIZERS = {
     "DecisionTree": optimize_dt,
     "RandomForest": optimize_rf,
     "ExtraTrees": optimize_extra_trees,
-    "GradientBoosting": optimize_gradient_boosting,
     "LightGBM": optimize_lightgbm,
     "XGBoost": optimize_xgboost,
+    "CatBoost": optimize_catboost,
 }
 
 
@@ -272,12 +318,6 @@ def build_final_model(model_name: str, best_params: dict):
             ("classifier", ExtraTreesClassifier(**params, random_state=42, n_jobs=-1))
         ])
 
-    elif model_name == "GradientBoosting":
-        return Pipeline([
-            ("imputer", SimpleImputer(strategy="median")),
-            ("classifier", GradientBoostingClassifier(**params, random_state=42))
-        ])
-
     elif model_name == "LightGBM":
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
@@ -288,6 +328,12 @@ def build_final_model(model_name: str, best_params: dict):
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("classifier", XGBoostWrapper(**params))
+        ])
+
+    elif model_name == "CatBoost":
+        return Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", CatBoostWrapper(**params))
         ])
 
     else:

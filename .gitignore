@@ -1,4 +1,4 @@
-﻿# Byte-compiled / optimized / DLL files
+# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
@@ -230,3 +230,5 @@ datasets/Netflix-*/
 # Results and test runs
 Results/
 Tests/
+catboost_info/
+

@@ -4,6 +4,9 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 
+import matplotlib
+matplotlib.use("Agg")
+
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -21,14 +24,14 @@ from Scripts.dataset_statistics import generate_dataset_characterization
 from Scripts.treatment_data import generate_all_resolution_datasets
 from Scripts.smote_treatment import generate_smote_for_all
 
-# Exclusively Tree-Based Models (AdaBoost removed due to poor multi-class performance)
+# Exclusively Tree-Based Models (State of the Art Gradient Boosting & Ensembles)
 TREE_MODELS = [
     "DecisionTree",
     "RandomForest",
     "ExtraTrees",
-    "GradientBoosting",
     "LightGBM",
     "XGBoost",
+    "CatBoost",
 ]
 
 
@@ -36,7 +39,7 @@ def run_experiment(
     num_classes: int = 6,
     datasets_to_run=None,
     models_to_run=None,
-    n_trials: int = 15,
+    n_trials: int = 25,
     use_smote: bool = False,
     seeds: list = None,
     generate_plots: bool = True,
@@ -195,7 +198,7 @@ def run_experiment(
     print("============================================================\n")
 
 
-def run_full_benchmark(n_trials: int = 15, seeds: list = None):
+def run_full_benchmark(n_trials: int = 25, seeds: list = None):
     """
     Runs the complete benchmark: all granularities (6, 4, 2)
     both WITHOUT SMOTE and WITH SMOTE across all tree models and scenarios.
@@ -208,7 +211,7 @@ def run_full_benchmark(n_trials: int = 15, seeds: list = None):
     print(" Granularities : 6, 4, and 2 Classes")
     print(" Modes         : WITHOUT SMOTE and WITH SMOTE")
     print(" Models        : DecisionTree, RandomForest, ExtraTrees,")
-    print("                 GradientBoosting, LightGBM, XGBoost")
+    print("                 LightGBM, XGBoost, CatBoost")
     print("=" * 75)
 
     for use_smote in [False, True]:
@@ -231,7 +234,7 @@ def display_menu():
     """
     Displays the CLI interactive terminal menu in English without emojis.
     """
-    n_trials = 15
+    n_trials = 25
     use_smote = False
     current_num_classes = 6
     multi_seeds = False
@@ -383,7 +386,7 @@ def main():
     parser.add_argument("--classes", type=int, choices=[2, 4, 6], default=6, help="Target number of resolution classes (2, 4, or 6).")
     parser.add_argument("--all-classes", action="store_true", help="Iteratively run across 6, 4, and 2 classes in current mode.")
     parser.add_argument("--full-benchmark", action="store_true", help="Run full benchmark across 6, 4, and 2 classes, WITHOUT and WITH SMOTE.")
-    parser.add_argument("--n-trials", type=int, default=15, help="Number of Optuna optimization trials (default: 15).")
+    parser.add_argument("--n-trials", type=int, default=25, help="Number of Optuna optimization trials (default: 25).")
     parser.add_argument("--smote", action="store_true", help="Use SMOTE-balanced training datasets.")
     parser.add_argument("--multi-seeds", action="store_true", help="Evaluate across multiple seeds (42, 100, 2024) to report Mean +- Std.")
     parser.add_argument("--generate-datasets", action="store_true", help="Generate 2, 4, and 6 class datasets from raw measurements.")
