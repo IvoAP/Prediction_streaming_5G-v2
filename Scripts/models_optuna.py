@@ -6,12 +6,15 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from sklearn.preprocessing import LabelEncoder
 from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, cross_val_predict
+from sklearn.metrics import f1_score
+from scipy.optimize import minimize
 
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import (
     RandomForestClassifier,
     ExtraTreesClassifier,
+    VotingClassifier,
 )
 from lightgbm import LGBMClassifier
 from xgboost import XGBClassifier
@@ -294,6 +297,49 @@ MODEL_OPTIMIZERS = {
 }
 
 
+class ThresholdTunedVotingClassifier(BaseEstimator, ClassifierMixin):
+    """Soft VotingClassifier with out-of-fold class-multiplier tuning for Macro F1."""
+
+    def __init__(self, estimators, weights=None, cv=3):
+        self.estimators = estimators
+        self.weights = weights
+        self.cv = cv
+
+    def fit(self, X, y):
+        self.voting_ = VotingClassifier(
+            estimators=self.estimators,
+            voting="soft",
+            weights=self.weights,
+            n_jobs=-1,
+        )
+        oof_probs = cross_val_predict(
+            self.voting_, X, y, cv=self.cv, method="predict_proba", n_jobs=-1
+        )
+        self.voting_.fit(X, y)
+        self.classes_ = self.voting_.classes_
+
+        n_classes = len(self.classes_)
+        def _loss(w):
+            preds = self.classes_[np.argmax(oof_probs * w, axis=1)]
+            return -f1_score(y, preds, average="macro")
+
+        res = minimize(
+            _loss,
+            np.ones(n_classes),
+            method="Nelder-Mead",
+            options={"maxiter": 300},
+        )
+        self.class_weights_ = res.x
+        return self
+
+    def predict_proba(self, X):
+        return self.voting_.predict_proba(X)
+
+    def predict(self, X):
+        probs = self.predict_proba(X)
+        return self.classes_[np.argmax(probs * self.class_weights_, axis=1)]
+
+
 def build_final_model(model_name: str, best_params: dict):
     """
     Constructs the pipeline using the best hyperparams found by Optuna.
@@ -334,6 +380,15 @@ def build_final_model(model_name: str, best_params: dict):
         return Pipeline([
             ("imputer", SimpleImputer(strategy="median")),
             ("classifier", CatBoostWrapper(**params))
+        ])
+
+    elif model_name == "VotingClassifier":
+        # params dict contains 'estimators' list of (name, model)
+        estimators = params.get("estimators", [])
+        weights = params.get("weights", None)
+        return Pipeline([
+            ("imputer", SimpleImputer(strategy="median")),
+            ("classifier", ThresholdTunedVotingClassifier(estimators=estimators, weights=weights))
         ])
 
     else:

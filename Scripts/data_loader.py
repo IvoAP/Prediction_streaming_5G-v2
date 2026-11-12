@@ -82,6 +82,12 @@ def load_and_preprocess_dataset(
     for col in FEATURE_COLUMNS:
         df_filtered[col] = pd.to_numeric(df_filtered[col], errors="coerce")
 
+    # Physics-informed 3GPP reconstruction for missing RSSI (RSSI ≈ RSRP - RSRQ)
+    # Applied strictly on an instantaneous per-sample basis without cross-sample leakage
+    if "RSSI" in df_filtered.columns and "RSRP" in df_filtered.columns and "RSRQ" in df_filtered.columns:
+        est_rssi = df_filtered["RSRP"] - df_filtered["RSRQ"]
+        df_filtered["RSSI"] = df_filtered["RSSI"].fillna(est_rssi)
+
     X = df_filtered[FEATURE_COLUMNS]
     y = df_filtered[TARGET_COLUMN]
 

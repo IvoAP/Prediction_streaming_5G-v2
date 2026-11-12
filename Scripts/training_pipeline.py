@@ -32,6 +32,7 @@ TREE_MODELS = [
     "LightGBM",
     "XGBoost",
     "CatBoost",
+    "VotingClassifier",
 ]
 
 
@@ -167,6 +168,94 @@ def run_experiment(
                 global_results.append(mean_res)
 
                 print(f"   [MEAN +- STD] {model_name}:")
+                print(f"     Bal Acc : {mean_res['balanced_accuracy']:.4f} +- {mean_res['balanced_accuracy_std']:.4f}")
+                print(f"     Macro F1: {mean_res['f1_score_macro']:.4f} +- {mean_res['f1_macro_std']:.4f}")
+            else:
+                global_results.append(seed_metrics[0])
+                res = seed_metrics[0]
+                print(f"   Accuracy             : {res['accuracy']:.4f}")
+                print(f"   Balanced Accuracy    : {res['balanced_accuracy']:.4f}")
+                print(f"   F1-Score (Macro)     : {res['f1_score_macro']:.4f}")
+                print(f"   F1-Score (Weighted)  : {res['f1_score_weighted']:.4f}")
+                print(f"   MCC                  : {res['mcc']:.4f}")
+                print(f"   Cohen's Kappa        : {res['cohen_kappa']:.4f}")
+                if not pd.isna(res["roc_auc"]):
+                    print(f"   ROC-AUC              : {res['roc_auc']:.4f}")
+                print(f"   Training Time (s)    : {res['train_time_seconds']:.2f}s")
+                print(f"   Inference Time (s)   : {res['inference_time_seconds']:.4f}s")
+
+        # Automatically evaluate VotingClassifier if ensemble candidates are present
+        ensemble_candidates = ["ExtraTrees", "LightGBM", "RandomForest", "CatBoost", "XGBoost"]
+        available_models = [m for m in ensemble_candidates if m in models_to_run and m in [b["model"] for b in best_params_list if b["dataset"] == dataset_name]]
+        
+        if "VotingClassifier" in models_to_run and len(available_models) >= 2:
+            print(f"\n------------------------------------------------------------")
+            print(f"[ENSEMBLE] Evaluating VotingClassifier for {dataset_name} ({len(available_models)} models)")
+            print(f"------------------------------------------------------------")
+            
+            # Select top models for Voting (e.g. ExtraTrees, LightGBM, and CatBoost/RandomForest)
+            chosen_names = available_models[:3]
+            best_params_map = {b["model"]: eval(b["best_params"]) if isinstance(b["best_params"], str) else b["best_params"] 
+                               for b in best_params_list if b["dataset"] == dataset_name}
+            
+            voting_estimators = [(m.lower(), build_final_model(m, best_params_map[m])) for m in chosen_names]
+            voting_params = {"estimators": voting_estimators}
+            
+            best_params_list.append({
+                "dataset": dataset_name,
+                "model": "VotingClassifier",
+                "num_classes": num_classes,
+                "use_smote": use_smote,
+                "best_params": f"SoftVoting({'+'.join(chosen_names)})",
+            })
+            
+            seed_metrics = []
+            for seed in seeds:
+                X_train, X_test, y_train, y_test = load_and_preprocess_dataset(
+                    dataset_key=dataset_name,
+                    num_classes=num_classes,
+                    use_smote=use_smote,
+                    random_state=seed,
+                )
+                final_model = build_final_model("VotingClassifier", voting_params)
+                gen_plot = generate_plots and (seed == seeds[0])
+                
+                global_res, per_class_res = evaluate_model(
+                    model=final_model,
+                    X_train=X_train,
+                    X_test=X_test,
+                    y_train=y_train,
+                    y_test=y_test,
+                    model_name="VotingClassifier",
+                    dataset_name=dataset_name,
+                    num_classes=num_classes,
+                    use_smote=use_smote,
+                    generate_plots=gen_plot,
+                    output_dir=output_base_dir,
+                )
+                global_res["seed"] = seed
+                for r in per_class_res:
+                    r["seed"] = seed
+                seed_metrics.append(global_res)
+                per_class_results.extend(per_class_res)
+
+            if len(seeds) > 1:
+                df_seeds = pd.DataFrame(seed_metrics)
+                mean_res = seed_metrics[0].copy()
+                mean_res["seed"] = "mean"
+                mean_res["accuracy"] = df_seeds["accuracy"].mean()
+                mean_res["balanced_accuracy"] = df_seeds["balanced_accuracy"].mean()
+                mean_res["f1_score_macro"] = df_seeds["f1_score_macro"].mean()
+                mean_res["f1_score_weighted"] = df_seeds["f1_score_weighted"].mean()
+                mean_res["mcc"] = df_seeds["mcc"].mean()
+                mean_res["cohen_kappa"] = df_seeds["cohen_kappa"].mean()
+                mean_res["train_time_seconds"] = df_seeds["train_time_seconds"].mean()
+                mean_res["inference_time_seconds"] = df_seeds["inference_time_seconds"].mean()
+                mean_res["balanced_accuracy_std"] = df_seeds["balanced_accuracy"].std()
+                mean_res["f1_macro_std"] = df_seeds["f1_score_macro"].std()
+                global_results.extend(seed_metrics)
+                global_results.append(mean_res)
+                print(f"   [MEAN +- STD] VotingClassifier:")
                 print(f"     Bal Acc : {mean_res['balanced_accuracy']:.4f} +- {mean_res['balanced_accuracy_std']:.4f}")
                 print(f"     Macro F1: {mean_res['f1_score_macro']:.4f} +- {mean_res['f1_macro_std']:.4f}")
             else:
