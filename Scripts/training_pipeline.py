@@ -18,7 +18,7 @@ from Scripts.data_loader import (
     get_dataset_map,
     load_and_preprocess_dataset,
 )
-from Scripts.models_optuna import MODEL_OPTIMIZERS, build_final_model
+from Scripts.models_optuna import MODEL_OPTIMIZERS, build_final_model, LAST_OPTUNA_SCORES
 from Scripts.evaluation import evaluate_model, save_results
 from Scripts.dataset_statistics import generate_dataset_characterization
 from Scripts.treatment_data import generate_all_resolution_datasets
@@ -82,6 +82,8 @@ def run_experiment(
         print(f"============================================================")
 
         for model_name in models_to_run:
+            if model_name == "VotingClassifier":
+                continue
             if model_name not in MODEL_OPTIMIZERS:
                 print(f"[WARNING] Model '{model_name}' not supported. Skipping...")
                 continue
@@ -193,13 +195,16 @@ def run_experiment(
             print(f"[ENSEMBLE] Evaluating VotingClassifier for {dataset_name} ({len(available_models)} models)")
             print(f"------------------------------------------------------------")
             
-            # Select top models for Voting (e.g. ExtraTrees, LightGBM, and CatBoost/RandomForest)
+            # Select top-3 models dynamically ranked by training CV Macro F1
+            available_models.sort(key=lambda m: LAST_OPTUNA_SCORES.get(m, 0.0), reverse=True)
             chosen_names = available_models[:3]
+            chosen_weights = [max(LAST_OPTUNA_SCORES.get(m, 0.1), 0.1) for m in chosen_names]
+            print(f"[ENSEMBLE] Top-3 selected by CV Macro F1: {chosen_names}")
             best_params_map = {b["model"]: eval(b["best_params"]) if isinstance(b["best_params"], str) else b["best_params"] 
                                for b in best_params_list if b["dataset"] == dataset_name}
             
             voting_estimators = [(m.lower(), build_final_model(m, best_params_map[m])) for m in chosen_names]
-            voting_params = {"estimators": voting_estimators}
+            voting_params = {"estimators": voting_estimators, "weights": chosen_weights}
             
             best_params_list.append({
                 "dataset": dataset_name,
